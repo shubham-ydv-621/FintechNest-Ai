@@ -13,7 +13,7 @@ const serializeTransaction = (obj) => {
     return serialized;
 }
 
-export async function CreateAccount(data){
+export async function createAccount(data){
 
     try {
         const {userId}=await auth();
