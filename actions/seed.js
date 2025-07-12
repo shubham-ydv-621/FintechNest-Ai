@@ -2,9 +2,8 @@
 
 import { db } from "@/lib/prisma";
 import { subDays } from "date-fns";
-
-const ACCOUNT_ID = "2f77cd4c-bab2-4a21-9255-0946c04a5c85";
-const USER_ID = "b7cc2451-b8d5-45a9-9d03-74a7be4674e5";
+const ACCOUNT_ID = "40c4709b-4e17-45fe-974a-54d64366233a";
+const USER_ID = "2badd9e5-5daf-4279-98da-ae5ca55a049f";
 
 // Categories with their typical amount ranges
 const CATEGORIES = {
@@ -12,10 +11,10 @@ const CATEGORIES = {
     { name: "salary", range: [5000, 8000] },
     { name: "freelance", range: [1000, 3000] },
     { name: "investments", range: [500, 2000] },
-    { name: "other-income", range: [100, 1000] },
+    { name: "other-income", range: [100, 1000] },  
   ],
   EXPENSE: [
-    { name: "housing", range: [1000, 2000] },
+    { name: "housing", range: [1000, 2000] },   
     { name: "transportation", range: [100, 500] },
     { name: "groceries", range: [200, 600] },
     { name: "utilities", range: [100, 300] },
