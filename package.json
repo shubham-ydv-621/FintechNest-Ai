@@ -8,7 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-     "postinstall": "prisma generate"
+    "postinstall": "prisma generate"
   },
   "dependencies": {
     "@arcjet/next": "^1.0.0-beta.9",
@@ -28,6 +28,7 @@
     "@radix-ui/react-tooltip": "^1.2.7",
     "@react-email/components": "^0.3.1",
     "@react-email/render": "^1.1.3",
+    "@vercel/analytics": "^1.5.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
