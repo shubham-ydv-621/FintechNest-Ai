@@ -95,11 +95,12 @@ export const testimonialsData = [
       "FintechNest-AI has transformed how I manage my business finances. The AI insights have helped me identify cost-saving opportunities I never knew existed.",
   },
   {
-    name: "Shubham Yadav",
-    role: "Financial Advisor",
-    image: "/shubhamt.jpg", // replace with your actual image path or URL
-    quote:
-      "I recommend FintechNest-AI to all my clients. The multi-currency support and detailed analytics make it perfect for international investors.",
+   name: "Shubham Yadav",
+role: "Founder",
+image: "/shubhamt.jpg", // replace with your actual image path or URL
+quote:
+  "I recommend FintechNest-AI to all my clients. The multi-currency support and detailed analytics make it perfect for international investors.",
+
   },
   {
     name: "Harsh Yadav",

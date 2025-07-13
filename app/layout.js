@@ -21,12 +21,29 @@ export default function RootLayout({ children }) {
          <Header/>
           <main className="min-h-screen">{children}</main>
           <Toaster richColors/>
-        <footer className="bg-blue-50 py-12">
-            <div className="container mx-auto px-4 text-center text-gray-600">
-              <p>Made with efforts by shubham</p>
-            </div>
-          </footer>
-      </body>
+
+        <footer className="bg-blue-50 py-8">
+  <div className="container mx-auto px-4 text-center text-gray-600 space-y-2">
+    <div className="flex justify-center space-x-4 text-xs text-gray-500">
+      <span>© {new Date().getFullYear()} FintechNest-AI</span>
+      <span>|</span>
+      <a href="/privacy" className="hover:underline">Privacy Policy</a>
+      <span>|</span>
+      <a href="/terms" className="hover:underline">Terms of Service</a>
+    </div>
+    <p className="text-xs">
+      For any queries, mail to  
+      <a href="mailto:shubham22csu444@ncuindia.edu" className="hover:underline ml-1">
+        shubham22csu444@ncuindia.edu
+      </a>
+    </p>
+    <p className="text-xs text-gray-400">
+      Designed and maintained by Shubham Yadav
+    </p>
+  </div>
+</footer>
+
+      </body> 
     </html>
     </ClerkProvider>
   );
