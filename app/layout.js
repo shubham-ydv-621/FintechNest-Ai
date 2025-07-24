@@ -35,8 +35,8 @@ export default function RootLayout({ children }) {
     </div>
     <p className="text-xs">
       For any queries, mail to  
-      <a href="mailto:shubham22csu444@ncuindia.edu" className="hover:underline ml-1">
-        shubham22csu444@ncuindia.edu
+      <a href="mailto:Shubham2006621@gmail.com" className="hover:underline ml-1">
+        Shubham2006621@gmail.com
       </a>
     </p>
     <p className="text-xs text-gray-400">
