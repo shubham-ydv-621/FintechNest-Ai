@@ -96,7 +96,7 @@ export const testimonialsData = [
   },
   {name: "Shubham Yadav",
 role: "Creator & Full-Stack Developer",
-image: "/shubhamt.jpg", // ensure this is correct and accessible
+image: "/shubham.jpg", // ensure this is correct and accessible
 quote: "Building FintechNest-AI challenged me to design scalable, user-centric financial tools. With multi-currency support and actionable analytics, it empowers investors to make smarter decisions.",
 
   },
