@@ -234,12 +234,31 @@ export async function scanReceipt(file) {
       throw new Error("No file provided");
     }
 
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    if (file.size > 10 * 1024 * 1024) {
+      throw new Error(`File exceeds 10MB limit: ${(file.size / 1024 / 1024).toFixed(2)}MB`);
+    }
 
-    // Convert File to ArrayBuffer
-    const arrayBuffer = await file.arrayBuffer();
-    // Convert ArrayBuffer to Base64
-    const base64String = Buffer.from(arrayBuffer).toString("base64");
+    let arrayBuffer;
+    try {
+      arrayBuffer = await file.arrayBuffer();
+    } catch (bufferError) {
+      console.error("Buffer error:", bufferError);
+      throw new Error("Failed to read file: " + bufferError.message);
+    }
+
+    if (!arrayBuffer || arrayBuffer.byteLength === 0) {
+      throw new Error("File is empty or unreadable");
+    }
+
+    let base64String;
+    try {
+      base64String = Buffer.from(arrayBuffer).toString("base64");
+    } catch (base64Error) {
+      console.error("Base64 error:", base64Error);
+      throw new Error("Failed to encode file");
+    }
+
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
     const prompt = `
       Analyze this receipt image and extract the following information in JSON format:
@@ -258,39 +277,84 @@ export async function scanReceipt(file) {
         "category": "string"
       }
 
-      If its not a recipt, return an empty object
+      If its not a receipt, return an empty object {}
     `;
 
-    const result = await model.generateContent([
-      {
-        inlineData: {
-          data: base64String,
-          mimeType: file.type || "image/jpeg",
+    let result;
+    try {
+      result = await model.generateContent([
+        {
+          inlineData: {
+            data: base64String,
+            mimeType: file.type || "image/jpeg",
+          },
         },
-      },
-      prompt,
-    ]);
+        prompt,
+      ]);
+    } catch (apiError) {
+      console.error("Gemini API error:", apiError);
+      const errorMsg = apiError?.message || "AI service error";
+      throw new Error("Gemini API failed: " + errorMsg);
+    }
 
-    const response = await result.response;
-    const text = await response.text();
+    if (!result) {
+      throw new Error("No response from AI model");
+    }
+
+    let response;
+    try {
+      response = await result.response;
+    } catch (respError) {
+      console.error("Response error:", respError);
+      throw new Error("Failed to get AI response: " + respError.message);
+    }
+
+    if (!response) {
+      throw new Error("Empty response from AI");
+    }
+
+    let text;
+    try {
+      text = await response.text();
+    } catch (textError) {
+      console.error("Text extraction error:", textError);
+      throw new Error("Failed to extract response text: " + textError.message);
+    }
+
+    if (!text || text.trim().length === 0) {
+      throw new Error("AI returned empty response");
+    }
+
     const cleanedText = text.replace(/```(?:json)?\n?/g, "").trim();
 
+    let data;
     try {
-      const data = JSON.parse(cleanedText);
-      return {
-        amount: parseFloat(data.amount),
-        date: new Date(data.date),
-        description: data.description,
-        category: data.category,
-        merchantName: data.merchantName,
-      };
+      data = JSON.parse(cleanedText);
     } catch (parseError) {
-      console.error("Error parsing JSON response:", parseError);
-      throw new Error("Invalid response format from Gemini");
+      console.error("JSON parse error:", parseError);
+      console.error("Received text:", cleanedText.substring(0, 200));
+      throw new Error("AI response was not valid JSON");
     }
+
+    if (!data || typeof data !== "object") {
+      throw new Error("AI returned invalid data format");
+    }
+
+    // Validate and extract data
+    if (!data.amount) {
+      throw new Error("AI could not extract receipt amount");
+    }
+
+    return {
+      amount: parseFloat(data.amount) || 0,
+      date: data.date ? new Date(data.date) : new Date(),
+      description: data.description || "Receipt",
+      category: data.category || "shopping",
+      merchantName: data.merchantName || "Unknown",
+    };
   } catch (error) {
-    console.error("Error scanning receipt:", error);
-    throw new Error("Failed to scan receipt");
+    console.error("Receipt scan error:", error);
+    throw new Error(error?.message || "Failed to scan receipt");
   }
 }
 

@@ -10,54 +10,65 @@ import { scanReceipt } from "@/actions/transaction";
 async function normalizeImageFile(file) {
   if (!file) throw new Error("No file provided");
 
-  if (file.type === "image/jpeg" && file.size <= 3 * 1024 * 1024) {
+  // If already JPEG and reasonably small, use as-is
+  if (file.type === "image/jpeg" && file.size < 2 * 1024 * 1024) {
     return file;
   }
 
+  // Otherwise, always compress
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
+    reader.onerror = () => reject(new Error("Unable to read file"));
+    
     reader.onload = (event) => {
       const img = new Image();
+      img.onerror = () => reject(new Error("Unable to load image"));
+      
       img.onload = () => {
-        let width = img.width;
-        let height = img.height;
-        const maxDimension = 1600;
+        try {
+          let width = img.width;
+          let height = img.height;
+          const maxDimension = 1400;
 
-        if (width > maxDimension) {
-          height = (height * maxDimension) / width;
-          width = maxDimension;
+          if (width > maxDimension) {
+            height = (height * maxDimension) / width;
+            width = maxDimension;
+          }
+          if (height > maxDimension) {
+            width = (width * maxDimension) / height;
+            height = maxDimension;
+          }
+
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) throw new Error("Canvas context unavailable");
+          
+          ctx.drawImage(img, 0, 0, width, height);
+
+          canvas.toBlob(
+            (blob) => {
+              if (!blob) throw new Error("Blob creation failed");
+              
+              const fileName = file.name.replace(/\.[^/.]+$/, ".jpg");
+              const compressedFile = new File([blob], fileName, {
+                type: "image/jpeg",
+                lastModified: Date.now(),
+              });
+              resolve(compressedFile);
+            },
+            "image/jpeg",
+            0.75
+          );
+        } catch (err) {
+          reject(new Error("Canvas compression failed: " + err.message));
         }
-        if (height > maxDimension) {
-          width = (width * maxDimension) / height;
-          height = maxDimension;
-        }
-
-        const canvas = document.createElement("canvas");
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext("2d");
-        ctx.drawImage(img, 0, 0, width, height);
-
-        canvas.toBlob(
-          (blob) => {
-            if (!blob) {
-              reject(new Error("Image conversion failed"));
-              return;
-            }
-            const compressedFile = new File([blob], file.name.replace(/\.[^/.]+$/, ".jpg"), {
-              type: "image/jpeg",
-              lastModified: Date.now(),
-            });
-            resolve(compressedFile);
-          },
-          "image/jpeg",
-          0.8
-        );
       };
-      img.onerror = () => reject(new Error("Unable to load image for compression"));
+      
       img.src = event.target.result;
     };
-    reader.onerror = () => reject(new Error("Unable to read file"));
+    
     reader.readAsDataURL(file);
   });
 }
@@ -77,18 +88,13 @@ export function ReceiptScanner({ onScanComplete }) {
     if (!file) return;
     setErrorMessage("");
 
-    if (file.size > 20 * 1024 * 1024) {
-      const message = "Please use a smaller image under 20MB.";
-      setErrorMessage(message);
-      toast.error(message);
-      return;
-    }
-
     try {
+      // Always compress to ensure file fits
       const processedFile = await normalizeImageFile(file);
       await scanReceiptFn(processedFile);
     } catch (error) {
-      const message = error?.message || "Failed to scan receipt";
+      const message = error?.message || "Failed to process image";
+      console.error("Scan error:", message);
       setErrorMessage(message);
       toast.error(message);
     }
