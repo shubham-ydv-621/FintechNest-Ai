@@ -227,64 +227,71 @@ export async function getUserTransactions(query = {}) {
   }
 }
 
-// Scan Receipt with simplified approach - use client-side mock when API fails
+// Scan Receipt using Claude API
 export async function scanReceipt(file) {
-  const MAX_RETRIES = 1;
+  const MAX_RETRIES = 2;
   const RETRY_DELAY = 500;
 
-  async function callGeminiAPI(base64String, mimeType, retryCount = 0) {
+  async function callClaudeAPI(base64String, mimeType, retryCount = 0) {
     try {
-      console.log(`[Gemini] Attempt ${retryCount + 1}/${MAX_RETRIES + 1}...`);
+      console.log(`[Claude] Attempt ${retryCount + 1}/${MAX_RETRIES + 1}...`);
       
-      const apiKey = process.env.GEMINI_API_KEY;
+      const apiKey = process.env.CLAUDE_API_KEY;
       if (!apiKey) {
-        console.error("[Gemini] API key not configured");
+        console.error("[Claude] API key not configured");
         throw new Error("API_KEY_MISSING");
       }
 
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [
-              {
-                parts: [
-                  {
-                    text: `Extract transaction details from this receipt image. Return ONLY valid JSON: { "amount": number, "date": "YYYY-MM-DD", "description": "string", "category": "shopping" }`,
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "claude-3-5-sonnet-20241022",
+          max_tokens: 1024,
+          messages: [
+            {
+              role: "user",
+              content: [
+                {
+                  type: "image",
+                  source: {
+                    type: "base64",
+                    media_type: mimeType,
+                    data: base64String,
                   },
-                  {
-                    inline_data: {
-                      mime_type: mimeType,
-                      data: base64String,
-                    },
-                  },
-                ],
-              },
-            ],
-          }),
-        }
-      );
+                },
+                {
+                  type: "text",
+                  text: `Extract transaction details from this receipt image. Return ONLY valid JSON (no markdown, no extra text, just the JSON object): { "amount": number, "date": "YYYY-MM-DD", "description": "string", "category": "shopping", "merchantName": "string" }`,
+                },
+              ],
+            },
+          ],
+        }),
+      });
 
-      console.log(`[Gemini] Response status: ${response.status}`);
+      console.log(`[Claude] Response status: ${response.status}`);
 
       if (response.status === 429) {
         if (retryCount < MAX_RETRIES) {
           const delayMs = RETRY_DELAY * Math.pow(2, retryCount);
-          console.log(`[Gemini] Rate limited. Waiting ${delayMs}ms...`);
+          console.log(`[Claude] Rate limited. Waiting ${delayMs}ms...`);
           await new Promise(resolve => setTimeout(resolve, delayMs));
-          return callGeminiAPI(base64String, mimeType, retryCount + 1);
+          return callClaudeAPI(base64String, mimeType, retryCount + 1);
         } else {
-          console.warn("[Gemini] Rate limited - quota exhausted");
+          console.warn("[Claude] Rate limited - quota exhausted");
           throw new Error("RATE_LIMIT_EXCEEDED");
         }
       }
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error(`[Gemini] Error: ${response.status} - ${errorText.substring(0, 100)}`);
-        throw new Error(`Gemini Error ${response.status}`);
+        console.error(`[Claude] Error: ${response.status} - ${errorText.substring(0, 150)}`);
+        throw new Error(`Claude API Error ${response.status}`);
       }
 
       return response;
@@ -307,15 +314,15 @@ export async function scanReceipt(file) {
     const arrayBuffer = await file.arrayBuffer();
     const base64String = Buffer.from(arrayBuffer).toString("base64");
     const mimeType = file.type || "image/jpeg";
-    console.log(`[Scan] File converted to base64`);
+    console.log(`[Scan] File converted to base64 (${(base64String.length / 1024).toFixed(1)}KB)`);
 
     let response;
     try {
-      response = await callGeminiAPI(base64String, mimeType);
+      response = await callClaudeAPI(base64String, mimeType);
     } catch (error) {
       if (error.message === "RATE_LIMIT_EXCEEDED") {
-        console.warn("[Scan] Gemini quota exceeded. Manual entry required.");
-        throw new Error("Google API quota exceeded. Please enter receipt details manually or try again in a few minutes.");
+        console.warn("[Scan] API quota exceeded");
+        throw new Error("Receipt scanning service temporarily unavailable. Please try again later or enter details manually.");
       } else if (error.message === "API_KEY_MISSING") {
         throw new Error("Receipt scanning not configured. Please contact support.");
       } else {
@@ -324,24 +331,33 @@ export async function scanReceipt(file) {
     }
 
     const data = await response.json();
-    console.log(`[Scan] Response parsed`);
+    console.log(`[Scan] Response received and parsed`);
 
-    const textContent = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    const textContent = data?.content?.[0]?.text;
 
     if (!textContent) {
-      console.error("[Scan] No text in response");
-      throw new Error("No response from API");
+      console.error("[Scan] No text in response:", JSON.stringify(data).substring(0, 200));
+      throw new Error("No response from Claude API");
     }
 
-    console.log(`[Scan] Extracting JSON...`);
+    console.log(`[Scan] Text content extracted, parsing JSON...`);
+    
+    // Extract JSON from response (Claude sometimes wraps it)
     const jsonMatch = textContent.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
-      console.error("[Scan] No JSON found");
-      throw new Error("Invalid response format");
+      console.error("[Scan] No JSON found in response:", textContent.substring(0, 200));
+      throw new Error("Could not extract JSON from receipt");
     }
 
-    const parsed = JSON.parse(jsonMatch[0]);
-    console.log(`[Scan] ✓ Success - Amount: ${parsed.amount}`);
+    let parsed;
+    try {
+      parsed = JSON.parse(jsonMatch[0]);
+    } catch (parseError) {
+      console.error("[Scan] JSON parse error:", parseError.message);
+      throw new Error("Invalid JSON format in response");
+    }
+
+    console.log(`[Scan] ✓ Successfully extracted - Amount: ${parsed.amount}`);
 
     return {
       amount: parseFloat(parsed.amount) || 0,
