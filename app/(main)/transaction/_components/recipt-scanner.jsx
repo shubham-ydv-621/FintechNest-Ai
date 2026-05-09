@@ -1,14 +1,71 @@
 "use client";
 
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useState } from "react";
 import { Camera, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import useFetch from "@/hooks/use-fetch";
 import { scanReceipt } from "@/actions/transaction";
 
+async function normalizeImageFile(file) {
+  if (!file) throw new Error("No file provided");
+
+  if (file.type === "image/jpeg" && file.size <= 3 * 1024 * 1024) {
+    return file;
+  }
+
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        let width = img.width;
+        let height = img.height;
+        const maxDimension = 1600;
+
+        if (width > maxDimension) {
+          height = (height * maxDimension) / width;
+          width = maxDimension;
+        }
+        if (height > maxDimension) {
+          width = (width * maxDimension) / height;
+          height = maxDimension;
+        }
+
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, width, height);
+
+        canvas.toBlob(
+          (blob) => {
+            if (!blob) {
+              reject(new Error("Image conversion failed"));
+              return;
+            }
+            const compressedFile = new File([blob], file.name.replace(/\.[^/.]+$/, ".jpg"), {
+              type: "image/jpeg",
+              lastModified: Date.now(),
+            });
+            resolve(compressedFile);
+          },
+          "image/jpeg",
+          0.8
+        );
+      };
+      img.onerror = () => reject(new Error("Unable to load image for compression"));
+      img.src = event.target.result;
+    };
+    reader.onerror = () => reject(new Error("Unable to read file"));
+    reader.readAsDataURL(file);
+  });
+}
+
 export function ReceiptScanner({ onScanComplete }) {
   const fileInputRef = useRef(null);
+
+  const [errorMessage, setErrorMessage] = useState("");
 
   const {
     loading: scanReceiptLoading,
@@ -17,12 +74,24 @@ export function ReceiptScanner({ onScanComplete }) {
   } = useFetch(scanReceipt);
 
   const handleReceiptScan = async (file) => {
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error("File size should be less than 5MB");
+    if (!file) return;
+    setErrorMessage("");
+
+    if (file.size > 20 * 1024 * 1024) {
+      const message = "Please use a smaller image under 20MB.";
+      setErrorMessage(message);
+      toast.error(message);
       return;
     }
 
-    await scanReceiptFn(file);
+    try {
+      const processedFile = await normalizeImageFile(file);
+      await scanReceiptFn(processedFile);
+    } catch (error) {
+      const message = error?.message || "Failed to scan receipt";
+      setErrorMessage(message);
+      toast.error(message);
+    }
   };
 
   useEffect(() => {
@@ -64,6 +133,9 @@ export function ReceiptScanner({ onScanComplete }) {
           </>
         )}
       </Button>
+      {errorMessage ? (
+        <div className="text-sm text-red-600 mt-2">{errorMessage}</div>
+      ) : null}
     </div>
   );
 }

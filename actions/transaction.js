@@ -230,6 +230,10 @@ export async function getUserTransactions(query = {}) {
 // Scan Receipt
 export async function scanReceipt(file) {
   try {
+    if (!file) {
+      throw new Error("No file provided");
+    }
+
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
     // Convert File to ArrayBuffer
@@ -261,14 +265,14 @@ export async function scanReceipt(file) {
       {
         inlineData: {
           data: base64String,
-          mimeType: file.type,
+          mimeType: file.type || "image/jpeg",
         },
       },
       prompt,
     ]);
 
     const response = await result.response;
-    const text = response.text();
+    const text = await response.text();
     const cleanedText = text.replace(/```(?:json)?\n?/g, "").trim();
 
     try {
