@@ -234,6 +234,7 @@ export async function scanReceipt(file) {
 
   async function makeAPICall(base64String, mimeType, retryCount = 0) {
     try {
+      console.log(`[API] Calling Gemini API (attempt ${retryCount + 1}/${MAX_RETRIES + 1})...`);
       const response = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
         {
@@ -259,11 +260,13 @@ export async function scanReceipt(file) {
         }
       );
 
+      console.log(`[API] Response status: ${response.status}`);
+
       // Handle rate limiting with exponential backoff
       if (response.status === 429) {
         if (retryCount < MAX_RETRIES) {
           const delayMs = BASE_DELAY * Math.pow(2, retryCount);
-          console.log(`Rate limited (429). Waiting ${delayMs}ms before retry ${retryCount + 1}/${MAX_RETRIES}`);
+          console.log(`[API] Rate limited (429). Waiting ${delayMs}ms before retry ${retryCount + 1}/${MAX_RETRIES}`);
           await new Promise(resolve => setTimeout(resolve, delayMs));
           return makeAPICall(base64String, mimeType, retryCount + 1);
         } else {
@@ -272,16 +275,21 @@ export async function scanReceipt(file) {
       }
 
       if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[API] Error response: ${errorText}`);
         throw new Error(`API Error ${response.status}`);
       }
 
       return response;
     } catch (error) {
+      console.error(`[API] Call failed: ${error.message}`);
       throw error;
     }
   }
 
   try {
+    console.log(`[Scan] Starting receipt scan (file size: ${(file.size / 1024 / 1024).toFixed(2)}MB)`);
+    
     if (!file) {
       throw new Error("No file provided");
     }
@@ -293,32 +301,41 @@ export async function scanReceipt(file) {
     const arrayBuffer = await file.arrayBuffer();
     const base64String = Buffer.from(arrayBuffer).toString("base64");
     const mimeType = file.type || "image/jpeg";
+    console.log(`[Scan] File converted to base64 (type: ${mimeType})`);
 
     const response = await makeAPICall(base64String, mimeType);
 
     const data = await response.json();
+    console.log(`[Scan] API response received`);
+    
     const textContent = data?.candidates?.[0]?.content?.parts?.[0]?.text;
 
     if (!textContent) {
+      console.error("[Scan] No text content in response:", JSON.stringify(data).substring(0, 200));
       throw new Error("No response from Gemini");
     }
 
+    console.log(`[Scan] Text extracted from response`);
     const jsonMatch = textContent.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
+      console.error("[Scan] JSON not found in text:", textContent.substring(0, 200));
       throw new Error("Invalid response format");
     }
 
     const parsed = JSON.parse(jsonMatch[0]);
+    console.log(`[Scan] JSON parsed successfully, extracted amount: ${parsed.amount}`);
 
-    return {
+    const result = {
       amount: parseFloat(parsed.amount) || 0,
       date: parsed.date ? new Date(parsed.date) : new Date(),
       description: parsed.description || "Receipt",
       category: parsed.category || "shopping",
       merchantName: parsed.merchantName || "Unknown",
     };
+    console.log(`[Scan] Receipt scan completed successfully`);
+    return result;
   } catch (error) {
-    console.error("Receipt scan error:", error.message);
+    console.error("[Scan] Receipt scan error:", error.message);
     throw new Error(error?.message || "Failed to scan receipt");
   }
 }

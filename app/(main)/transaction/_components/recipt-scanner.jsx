@@ -9,23 +9,34 @@ import { scanReceipt } from "@/actions/transaction";
 
 async function normalizeImageFile(file) {
   if (!file) throw new Error("No file provided");
+  
+  console.log(`[Image] Processing: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB, ${file.type})`);
 
   // If already JPEG and reasonably small, use as-is
   if (file.type === "image/jpeg" && file.size < 2 * 1024 * 1024) {
+    console.log("[Image] Using as-is (small JPEG)");
     return file;
   }
 
   // Otherwise, always compress
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onerror = () => reject(new Error("Unable to read file"));
+    reader.onerror = () => {
+      console.error("[Image] FileReader error");
+      reject(new Error("Unable to read file"));
+    };
     
     reader.onload = (event) => {
+      console.log("[Image] File read, creating Image object");
       const img = new Image();
-      img.onerror = () => reject(new Error("Unable to load image"));
+      img.onerror = () => {
+        console.error("[Image] Image load error");
+        reject(new Error("Unable to load image"));
+      };
       
       img.onload = () => {
         try {
+          console.log(`[Image] Loaded: ${img.width}x${img.height}px`);
           let width = img.width;
           let height = img.height;
           const maxDimension = 1400;
@@ -39,6 +50,7 @@ async function normalizeImageFile(file) {
             height = maxDimension;
           }
 
+          console.log(`[Image] Resizing to: ${width}x${height}px`);
           const canvas = document.createElement("canvas");
           canvas.width = width;
           canvas.height = height;
@@ -49,19 +61,27 @@ async function normalizeImageFile(file) {
 
           canvas.toBlob(
             (blob) => {
-              if (!blob) throw new Error("Blob creation failed");
-              
-              const fileName = file.name.replace(/\.[^/.]+$/, ".jpg");
-              const compressedFile = new File([blob], fileName, {
-                type: "image/jpeg",
-                lastModified: Date.now(),
-              });
-              resolve(compressedFile);
+              try {
+                if (!blob) throw new Error("Blob creation failed");
+                const sizeReduction = ((1 - blob.size / file.size) * 100).toFixed(1);
+                console.log(`[Image] Compressed: ${(blob.size / 1024 / 1024).toFixed(2)}MB (${sizeReduction}% smaller)`);
+                
+                const fileName = file.name.replace(/\.[^/.]+$/, ".jpg");
+                const compressedFile = new File([blob], fileName, {
+                  type: "image/jpeg",
+                  lastModified: Date.now(),
+                });
+                resolve(compressedFile);
+              } catch (err) {
+                console.error(`[Image] Blob error: ${err.message}`);
+                reject(err);
+              }
             },
             "image/jpeg",
             0.75
           );
         } catch (err) {
+          console.error(`[Image] Canvas error: ${err.message}`);
           reject(new Error("Canvas compression failed: " + err.message));
         }
       };
@@ -87,14 +107,18 @@ export function ReceiptScanner({ onScanComplete }) {
   const handleReceiptScan = async (file) => {
     if (!file) return;
     setErrorMessage("");
+    console.log("[Scanner] Scan initiated");
 
     try {
       // Always compress to ensure file fits
+      console.log("[Scanner] Starting image normalization");
       const processedFile = await normalizeImageFile(file);
+      console.log("[Scanner] Image normalized, calling API");
       await scanReceiptFn(processedFile);
+      console.log("[Scanner] API call completed");
     } catch (error) {
       const message = error?.message || "Failed to process image";
-      console.error("Scan error:", message);
+      console.error("[Scanner] Error:", message);
       setErrorMessage(message);
       toast.error(message);
     }
