@@ -235,125 +235,65 @@ export async function scanReceipt(file) {
     }
 
     if (file.size > 10 * 1024 * 1024) {
-      throw new Error(`File exceeds 10MB limit: ${(file.size / 1024 / 1024).toFixed(2)}MB`);
+      throw new Error(`File exceeds 10MB limit`);
     }
 
-    let arrayBuffer;
-    try {
-      arrayBuffer = await file.arrayBuffer();
-    } catch (bufferError) {
-      console.error("Buffer error:", bufferError);
-      throw new Error("Failed to read file: " + bufferError.message);
-    }
+    const arrayBuffer = await file.arrayBuffer();
+    const base64String = Buffer.from(arrayBuffer).toString("base64");
 
-    if (!arrayBuffer || arrayBuffer.byteLength === 0) {
-      throw new Error("File is empty or unreadable");
-    }
-
-    let base64String;
-    try {
-      base64String = Buffer.from(arrayBuffer).toString("base64");
-    } catch (base64Error) {
-      console.error("Base64 error:", base64Error);
-      throw new Error("Failed to encode file");
-    }
-
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-
-    const prompt = `
-      Analyze this receipt image and extract the following information in JSON format:
-      - Total amount (just the number)
-      - Date (in ISO format)
-      - Description or items purchased (brief summary)
-      - Merchant/store name
-      - Suggested category (one of: housing,transportation,groceries,utilities,entertainment,food,shopping,healthcare,education,personal,travel,insurance,gifts,bills,other-expense )
-      
-      Only respond with valid JSON in this exact format:
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
       {
-        "amount": number,
-        "date": "ISO date string",
-        "description": "string",
-        "merchantName": "string",
-        "category": "string"
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                {
+                  text: `Extract transaction details from this receipt image. Return ONLY valid JSON: { "amount": number, "date": "YYYY-MM-DD", "description": "string", "category": "shopping" }`,
+                },
+                {
+                  inline_data: {
+                    mime_type: file.type || "image/jpeg",
+                    data: base64String,
+                  },
+                },
+              ],
+            },
+          ],
+        }),
       }
+    );
 
-      If its not a receipt, return an empty object {}
-    `;
-
-    let result;
-    try {
-      result = await model.generateContent([
-        {
-          inlineData: {
-            data: base64String,
-            mimeType: file.type || "image/jpeg",
-          },
-        },
-        prompt,
-      ]);
-    } catch (apiError) {
-      console.error("Gemini API error:", apiError);
-      const errorMsg = apiError?.message || "AI service error";
-      throw new Error("Gemini API failed: " + errorMsg);
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`API Error ${response.status}`);
     }
 
-    if (!result) {
-      throw new Error("No response from AI model");
+    const data = await response.json();
+    const textContent = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+
+    if (!textContent) {
+      throw new Error("No response from Gemini");
     }
 
-    let response;
-    try {
-      response = await result.response;
-    } catch (respError) {
-      console.error("Response error:", respError);
-      throw new Error("Failed to get AI response: " + respError.message);
+    const jsonMatch = textContent.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      throw new Error("Invalid response format");
     }
 
-    if (!response) {
-      throw new Error("Empty response from AI");
-    }
-
-    let text;
-    try {
-      text = await response.text();
-    } catch (textError) {
-      console.error("Text extraction error:", textError);
-      throw new Error("Failed to extract response text: " + textError.message);
-    }
-
-    if (!text || text.trim().length === 0) {
-      throw new Error("AI returned empty response");
-    }
-
-    const cleanedText = text.replace(/```(?:json)?\n?/g, "").trim();
-
-    let data;
-    try {
-      data = JSON.parse(cleanedText);
-    } catch (parseError) {
-      console.error("JSON parse error:", parseError);
-      console.error("Received text:", cleanedText.substring(0, 200));
-      throw new Error("AI response was not valid JSON");
-    }
-
-    if (!data || typeof data !== "object") {
-      throw new Error("AI returned invalid data format");
-    }
-
-    // Validate and extract data
-    if (!data.amount) {
-      throw new Error("AI could not extract receipt amount");
-    }
+    const parsed = JSON.parse(jsonMatch[0]);
 
     return {
-      amount: parseFloat(data.amount) || 0,
-      date: data.date ? new Date(data.date) : new Date(),
-      description: data.description || "Receipt",
-      category: data.category || "shopping",
-      merchantName: data.merchantName || "Unknown",
+      amount: parseFloat(parsed.amount) || 0,
+      date: parsed.date ? new Date(parsed.date) : new Date(),
+      description: parsed.description || "Receipt",
+      category: parsed.category || "shopping",
+      merchantName: parsed.merchantName || "Unknown",
     };
   } catch (error) {
-    console.error("Receipt scan error:", error);
+    console.error("Receipt scan error:", error.message);
     throw new Error(error?.message || "Failed to scan receipt");
   }
 }
