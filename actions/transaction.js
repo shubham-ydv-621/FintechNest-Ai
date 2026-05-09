@@ -229,6 +229,58 @@ export async function getUserTransactions(query = {}) {
 
 // Scan Receipt
 export async function scanReceipt(file) {
+  const MAX_RETRIES = 3;
+  const BASE_DELAY = 1000;
+
+  async function makeAPICall(base64String, mimeType, retryCount = 0) {
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: [
+                  {
+                    text: `Extract transaction details from this receipt image. Return ONLY valid JSON: { "amount": number, "date": "YYYY-MM-DD", "description": "string", "category": "shopping" }`,
+                  },
+                  {
+                    inline_data: {
+                      mime_type: mimeType,
+                      data: base64String,
+                    },
+                  },
+                ],
+              },
+            ],
+          }),
+        }
+      );
+
+      // Handle rate limiting with exponential backoff
+      if (response.status === 429) {
+        if (retryCount < MAX_RETRIES) {
+          const delayMs = BASE_DELAY * Math.pow(2, retryCount);
+          console.log(`Rate limited (429). Waiting ${delayMs}ms before retry ${retryCount + 1}/${MAX_RETRIES}`);
+          await new Promise(resolve => setTimeout(resolve, delayMs));
+          return makeAPICall(base64String, mimeType, retryCount + 1);
+        } else {
+          throw new Error("API rate limit exceeded after retries. Please try again later.");
+        }
+      }
+
+      if (!response.ok) {
+        throw new Error(`API Error ${response.status}`);
+      }
+
+      return response;
+    } catch (error) {
+      throw error;
+    }
+  }
+
   try {
     if (!file) {
       throw new Error("No file provided");
@@ -240,36 +292,9 @@ export async function scanReceipt(file) {
 
     const arrayBuffer = await file.arrayBuffer();
     const base64String = Buffer.from(arrayBuffer).toString("base64");
+    const mimeType = file.type || "image/jpeg";
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [
-                {
-                  text: `Extract transaction details from this receipt image. Return ONLY valid JSON: { "amount": number, "date": "YYYY-MM-DD", "description": "string", "category": "shopping" }`,
-                },
-                {
-                  inline_data: {
-                    mime_type: file.type || "image/jpeg",
-                    data: base64String,
-                  },
-                },
-              ],
-            },
-          ],
-        }),
-      }
-    );
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`API Error ${response.status}`);
-    }
+    const response = await makeAPICall(base64String, mimeType);
 
     const data = await response.json();
     const textContent = data?.candidates?.[0]?.content?.parts?.[0]?.text;
