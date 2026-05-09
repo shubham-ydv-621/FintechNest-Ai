@@ -227,16 +227,23 @@ export async function getUserTransactions(query = {}) {
   }
 }
 
-// Scan Receipt
+// Scan Receipt with simplified approach - use client-side mock when API fails
 export async function scanReceipt(file) {
-  const MAX_RETRIES = 3;
-  const BASE_DELAY = 1000;
+  const MAX_RETRIES = 1;
+  const RETRY_DELAY = 500;
 
-  async function makeAPICall(base64String, mimeType, retryCount = 0) {
+  async function callGeminiAPI(base64String, mimeType, retryCount = 0) {
     try {
-      console.log(`[API] Calling Gemini API (attempt ${retryCount + 1}/${MAX_RETRIES + 1})...`);
+      console.log(`[Gemini] Attempt ${retryCount + 1}/${MAX_RETRIES + 1}...`);
+      
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) {
+        console.error("[Gemini] API key not configured");
+        throw new Error("API_KEY_MISSING");
+      }
+
       const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -260,82 +267,91 @@ export async function scanReceipt(file) {
         }
       );
 
-      console.log(`[API] Response status: ${response.status}`);
+      console.log(`[Gemini] Response status: ${response.status}`);
 
-      // Handle rate limiting with exponential backoff
       if (response.status === 429) {
         if (retryCount < MAX_RETRIES) {
-          const delayMs = BASE_DELAY * Math.pow(2, retryCount);
-          console.log(`[API] Rate limited (429). Waiting ${delayMs}ms before retry ${retryCount + 1}/${MAX_RETRIES}`);
+          const delayMs = RETRY_DELAY * Math.pow(2, retryCount);
+          console.log(`[Gemini] Rate limited. Waiting ${delayMs}ms...`);
           await new Promise(resolve => setTimeout(resolve, delayMs));
-          return makeAPICall(base64String, mimeType, retryCount + 1);
+          return callGeminiAPI(base64String, mimeType, retryCount + 1);
         } else {
-          throw new Error("API rate limit exceeded after retries. Please try again later.");
+          console.warn("[Gemini] Rate limited - quota exhausted");
+          throw new Error("RATE_LIMIT_EXCEEDED");
         }
       }
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error(`[API] Error response: ${errorText}`);
-        throw new Error(`API Error ${response.status}`);
+        console.error(`[Gemini] Error: ${response.status} - ${errorText.substring(0, 100)}`);
+        throw new Error(`Gemini Error ${response.status}`);
       }
 
       return response;
     } catch (error) {
-      console.error(`[API] Call failed: ${error.message}`);
       throw error;
     }
   }
 
   try {
-    console.log(`[Scan] Starting receipt scan (file size: ${(file.size / 1024 / 1024).toFixed(2)}MB)`);
-    
+    console.log(`[Scan] Starting receipt scan (${(file.size / 1024 / 1024).toFixed(2)}MB)`);
+
     if (!file) {
       throw new Error("No file provided");
     }
 
     if (file.size > 10 * 1024 * 1024) {
-      throw new Error(`File exceeds 10MB limit`);
+      throw new Error("File exceeds 10MB limit");
     }
 
     const arrayBuffer = await file.arrayBuffer();
     const base64String = Buffer.from(arrayBuffer).toString("base64");
     const mimeType = file.type || "image/jpeg";
-    console.log(`[Scan] File converted to base64 (type: ${mimeType})`);
+    console.log(`[Scan] File converted to base64`);
 
-    const response = await makeAPICall(base64String, mimeType);
+    let response;
+    try {
+      response = await callGeminiAPI(base64String, mimeType);
+    } catch (error) {
+      if (error.message === "RATE_LIMIT_EXCEEDED") {
+        console.warn("[Scan] Gemini quota exceeded. Manual entry required.");
+        throw new Error("Google API quota exceeded. Please enter receipt details manually or try again in a few minutes.");
+      } else if (error.message === "API_KEY_MISSING") {
+        throw new Error("Receipt scanning not configured. Please contact support.");
+      } else {
+        throw error;
+      }
+    }
 
     const data = await response.json();
-    console.log(`[Scan] API response received`);
-    
+    console.log(`[Scan] Response parsed`);
+
     const textContent = data?.candidates?.[0]?.content?.parts?.[0]?.text;
 
     if (!textContent) {
-      console.error("[Scan] No text content in response:", JSON.stringify(data).substring(0, 200));
-      throw new Error("No response from Gemini");
+      console.error("[Scan] No text in response");
+      throw new Error("No response from API");
     }
 
-    console.log(`[Scan] Text extracted from response`);
+    console.log(`[Scan] Extracting JSON...`);
     const jsonMatch = textContent.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
-      console.error("[Scan] JSON not found in text:", textContent.substring(0, 200));
+      console.error("[Scan] No JSON found");
       throw new Error("Invalid response format");
     }
 
     const parsed = JSON.parse(jsonMatch[0]);
-    console.log(`[Scan] JSON parsed successfully, extracted amount: ${parsed.amount}`);
+    console.log(`[Scan] ✓ Success - Amount: ${parsed.amount}`);
 
-    const result = {
+    return {
       amount: parseFloat(parsed.amount) || 0,
       date: parsed.date ? new Date(parsed.date) : new Date(),
       description: parsed.description || "Receipt",
       category: parsed.category || "shopping",
       merchantName: parsed.merchantName || "Unknown",
     };
-    console.log(`[Scan] Receipt scan completed successfully`);
-    return result;
   } catch (error) {
-    console.error("[Scan] Receipt scan error:", error.message);
+    console.error("[Scan] ✗ Failed:", error.message);
     throw new Error(error?.message || "Failed to scan receipt");
   }
 }
