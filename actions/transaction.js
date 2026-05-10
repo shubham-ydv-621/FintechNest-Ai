@@ -235,9 +235,11 @@ export async function scanReceipt(file) {
       
       const apiKey = process.env.GEMINI_API_KEY;
       if (!apiKey) {
-        console.error("[Gemini] API key not configured");
-        throw new Error("API_KEY_MISSING");
+        console.error("[Gemini] API key not configured in Vercel");
+        throw new Error("API key missing - check Vercel environment variables");
       }
+
+      console.log(`[Gemini] Using API key: ${apiKey.substring(0, 10)}...`);
 
       const response = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
@@ -268,35 +270,15 @@ export async function scanReceipt(file) {
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error(`[Gemini] Error ${response.status}:`, errorText.substring(0, 200));
-        throw new Error(`Gemini API Error ${response.status}`);
+        console.error(`[Gemini] API Error ${response.status}:`, errorText.substring(0, 300));
+        throw new Error(`Gemini API returned ${response.status}: ${errorText.substring(0, 100)}`);
       }
 
       return response;
     } catch (error) {
+      console.error("[Gemini] Call failed:", error.message);
       throw error;
     }
-  }
-
-  // Fallback: Mock receipt data for demo (when API unavailable)
-  function generateMockReceiptData() {
-    console.log("[Scan] Using demo data fallback");
-    
-    const amounts = [45.99, 128.50, 76.25, 312.00, 89.99];
-    const merchants = ["Starbucks", "Walmart", "Amazon", "Target", "Best Buy"];
-    const categories = ["shopping", "food", "entertainment", "utilities"];
-    
-    const randomAmount = amounts[Math.floor(Math.random() * amounts.length)];
-    const randomMerchant = merchants[Math.floor(Math.random() * merchants.length)];
-    const randomCategory = categories[Math.floor(Math.random() * categories.length)];
-    
-    return {
-      amount: randomAmount,
-      date: new Date(),
-      description: `Demo: Purchase at ${randomMerchant}`,
-      category: randomCategory,
-      merchantName: randomMerchant,
-    };
   }
 
   try {
@@ -308,36 +290,31 @@ export async function scanReceipt(file) {
     const arrayBuffer = await file.arrayBuffer();
     const base64String = Buffer.from(arrayBuffer).toString("base64");
     const mimeType = file.type || "image/jpeg";
-    console.log(`[Scan] File converted to base64`);
+    console.log(`[Scan] File converted to base64 (${(base64String.length / 1024).toFixed(1)}KB)`);
 
-    let response;
-    try {
-      response = await callGeminiAPI(base64String, mimeType);
-    } catch (error) {
-      console.warn("[Scan] Gemini API failed, using demo data:", error.message);
-      return generateMockReceiptData();
-    }
+    // REAL API CALL - NO FALLBACK
+    const response = await callGeminiAPI(base64String, mimeType);
 
     const data = await response.json();
-    console.log(`[Scan] Response received`);
+    console.log(`[Scan] Response received`, JSON.stringify(data).substring(0, 200));
 
     const textContent = data?.candidates?.[0]?.content?.parts?.[0]?.text;
 
     if (!textContent) {
-      console.error("[Scan] No text in response");
-      return generateMockReceiptData();
+      console.error("[Scan] No text in response:", JSON.stringify(data));
+      throw new Error("AI returned empty response");
     }
 
-    console.log(`[Scan] Parsing JSON from response...`);
+    console.log(`[Scan] Text content: ${textContent.substring(0, 100)}`);
     const jsonMatch = textContent.match(/\{[\s\S]*\}/);
     
     if (!jsonMatch) {
-      console.error("[Scan] No JSON found");
-      return generateMockReceiptData();
+      console.error("[Scan] No JSON found in text");
+      throw new Error("Could not extract JSON from receipt");
     }
 
     let parsed = JSON.parse(jsonMatch[0]);
-    console.log(`[Scan] ✓ Success - Amount: ${parsed.amount}`);
+    console.log(`[Scan] ✓ SUCCESS - Amount: ${parsed.amount}, Description: ${parsed.description}`);
 
     return {
       amount: parseFloat(parsed.amount) || 0,
@@ -347,8 +324,9 @@ export async function scanReceipt(file) {
       merchantName: parsed.merchantName || "Unknown",
     };
   } catch (error) {
-    console.error("[Scan] ✗ Failed:", error.message);
-    return generateMockReceiptData();
+    console.error("[Scan] ✗ FAILED:", error.message);
+    // THROW ERROR - Don't return mock data
+    throw new Error(`Receipt scan failed: ${error.message}`);
   }
 }
 
