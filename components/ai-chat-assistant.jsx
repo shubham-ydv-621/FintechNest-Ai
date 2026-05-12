@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { getFinanceInsight } from "@/actions/finance-chat";
 
-export function AIChatAssistant() {
+function ChatAssistantContent() {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([
     {
@@ -189,4 +189,18 @@ export function AIChatAssistant() {
       </div>
     </div>
   );
+}
+
+export function AIChatAssistant() {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) {
+    return null;
+  }
+
+  return <ChatAssistantContent />;
 }
