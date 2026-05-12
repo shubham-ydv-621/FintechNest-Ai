@@ -7,46 +7,30 @@ export async function getFinanceInsight(question) {
   try {
     const { userId: clerkUserId } = await auth();
 
-    if (!clerkUserId) {
-      throw new Error("Unauthorized");
-    }
-
-    if (!question || question.trim().length === 0) {
-      throw new Error("Question is required");
-    }
+    if (!clerkUserId) throw new Error("Unauthorized");
+    if (!question?.trim()) throw new Error("Question is required");
 
     console.log(
-      `[Finance Chat] Processing question: ${question.substring(0, 80)}`
+      `[Finance Chat] Processing: ${question.slice(0, 80)}`
     );
 
     // =========================
-    // GET REAL DATABASE USER
+    // GET USER
     // =========================
-
     const dbUser = await db.user.findUnique({
-      where: {
-        clerkUserId,
-      },
+      where: { clerkUserId },
     });
 
-    if (!dbUser) {
-      throw new Error("User not found in database");
-    }
+    if (!dbUser) throw new Error("User not found");
 
     // =========================
-    // FETCH TRANSACTIONS
+    // FETCH DATA (optimized)
     // =========================
-
     const transactions = await db.transaction.findMany({
-      where: {
-        userId: dbUser.id,
-      },
-      orderBy: {
-        date: "desc",
-      },
-      take: 150,
+      where: { userId: dbUser.id },
+      orderBy: { date: "desc" },
+      take: 120,
       select: {
-        id: true,
         amount: true,
         category: true,
         description: true,
@@ -58,169 +42,124 @@ export async function getFinanceInsight(question) {
     if (!transactions.length) {
       return {
         success: false,
-        message:
-          "No transactions found yet. Add some transactions first.",
+        message: "No transactions found yet.",
       };
     }
 
     // =========================
-    // FILTERS
+    // BASIC NORMALIZATION
     // =========================
+    const lower = question.toLowerCase();
 
-    const lowerQuestion = question.toLowerCase();
-
-    const categories = [
-      "food",
-      "shopping",
-      "transport",
-      "entertainment",
-      "health",
-      "travel",
-      "education",
-      "bills",
-      "groceries",
-      "salary",
-    ];
-
-    let detectedCategory = null;
-
-    for (const cat of categories) {
-      if (lowerQuestion.includes(cat)) {
-        detectedCategory = cat;
-        break;
-      }
-    }
-
-    let filteredTransactions = transactions;
-
-    if (detectedCategory) {
-      const matched = transactions.filter((t) =>
-        (t.category || "")
-          .toLowerCase()
-          .includes(detectedCategory)
-      );
-
-      if (matched.length > 0) {
-        filteredTransactions = matched;
-      }
-    }
+    // smart intent detection
+    const isBalanceQuery = lower.includes("balance");
+    const isSpentQuery = lower.includes("spent") || lower.includes("spend");
+    const isCategoryQuery = lower.includes("category");
 
     // =========================
     // CALCULATIONS
     // =========================
+    const expenses = transactions.filter(t => t.type === "EXPENSE");
+    const income = transactions.filter(t => t.type === "INCOME");
 
-    const expenseTransactions = transactions.filter(
-      (t) => t.type === "EXPENSE"
-    );
-
-    const incomeTransactions = transactions.filter(
-      (t) => t.type === "INCOME"
-    );
-
-    const totalSpent = expenseTransactions.reduce(
-      (sum, t) => sum + Number(t.amount || 0),
+    const totalSpent = expenses.reduce(
+      (s, t) => s + Number(t.amount || 0),
       0
     );
 
-    const totalIncome = incomeTransactions.reduce(
-      (sum, t) => sum + Number(t.amount || 0),
+    const totalIncome = income.reduce(
+      (s, t) => s + Number(t.amount || 0),
       0
     );
 
-    const currentBalance = totalIncome - totalSpent;
+    const balance = totalIncome - totalSpent;
 
     // =========================
-    // CATEGORY ANALYTICS
+    // CATEGORY BREAKDOWN
     // =========================
+    const categoryMap = {};
 
-    const byCategoryMap = {};
-
-    expenseTransactions.forEach((t) => {
-      const cat = t.category || "Uncategorized";
-
-      byCategoryMap[cat] =
-        (byCategoryMap[cat] || 0) + Number(t.amount || 0);
+    expenses.forEach(t => {
+      const cat = t.category || "Other";
+      categoryMap[cat] =
+        (categoryMap[cat] || 0) + Number(t.amount || 0);
     });
 
-    const topCategories = Object.entries(byCategoryMap)
+    const topCategories = Object.entries(categoryMap)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 5)
+      .map(([c, v]) => `${c}: $${v.toFixed(2)}`)
+      .join(" | ");
+
+    // =========================
+    // REDUCED CONTEXT (IMPORTANT OPTIMIZATION)
+    // =========================
+    const contextTransactions = transactions
+      .slice(0, 15)
       .map(
-        ([cat, amount]) =>
-          `${cat}: $${Number(amount).toFixed(2)}`
+        t =>
+          `${t.date.toISOString().split("T")[0]} | ${t.category} | $${t.amount} | ${t.type}`
       )
-      .join(", ");
-
-    // =========================
-    // RECENT TRANSACTIONS
-    // =========================
-
-    const recentTransactions = filteredTransactions
-      .slice(0, 25)
-      .map((t) => {
-        return `
-Date: ${new Date(t.date).toLocaleDateString()}
-Category: ${t.category || "Unknown"}
-Amount: $${Number(t.amount || 0).toFixed(2)}
-Type: ${t.type}
-Description: ${t.description || "No description"}
-`;
-      })
       .join("\n");
 
     // =========================
-    // BUILD PROMPT
+    // FINAL PROMPT (CLEAN + STRUCTURED)
     // =========================
-
     const prompt = `
-You are FintechNest AI, an intelligent financial assistant.
+You are FintechNest AI — a premium financial intelligence assistant.
 
-Analyze ONLY the financial data below and answer the user's question accurately.
+Answer ONLY using provided data.
 
-=========================
-USER FINANCIAL DATA
-=========================
+====================
+USER DATA
+====================
+Balance: $${balance.toFixed(2)}
+Income: $${totalIncome.toFixed(2)}
+Spent: $${totalSpent.toFixed(2)}
 
-Current Balance: $${currentBalance.toFixed(2)}
-
-Total Income: $${totalIncome.toFixed(2)}
-
-Total Expenses: $${totalSpent.toFixed(2)}
-
-Transaction Count: ${transactions.length}
-
-Top Spending Categories:
+Top Categories:
 ${topCategories}
 
 Recent Transactions:
-${recentTransactions}
+${contextTransactions}
 
-=========================
-USER QUESTION
-=========================
+====================
+QUESTION
+====================
+${question}
 
-"${question}"
+====================
+RESPONSE FORMAT (STRICT)
+====================
 
-=========================
-RULES
-=========================
+📊 Summary:
+- ...
 
-1. Use ONLY the provided financial data
-2. Give exact spending values when possible
-3. Keep response concise and premium
-4. Give intelligent financial insights
-5. Never hallucinate fake transactions
-6. Sound like a smart fintech AI assistant
+💰 Key Numbers:
+- Spent:
+- Income:
+- Balance:
 
-Respond naturally.
+📂 Breakdown:
+- ...
+
+💡 Insight:
+- ...
+
+⚠️ Advice:
+- (only if needed)
+
+RULES:
+- Be extremely concise
+- No long paragraphs
+- No hallucination
+- Use numbers when possible
+- Keep professional fintech tone
 `;
-
-    console.log("[Finance Chat] Calling Mistral API");
 
     // =========================
     // AI CALL
     // =========================
-
     const response = await fetch(
       "https://api.mistral.ai/v1/chat/completions",
       {
@@ -235,24 +174,22 @@ Respond naturally.
             {
               role: "system",
               content:
-                "You are an advanced AI financial assistant.",
+                "You are a strict financial AI that gives structured, precise answers.",
             },
             {
               role: "user",
               content: prompt,
             },
           ],
-          temperature: 0.4,
-          max_tokens: 300,
+          temperature: 0.3,
+          max_tokens: 350,
         }),
       }
     );
 
     if (!response.ok) {
-      const errorText = await response.text();
-
-      console.error("[Finance Chat] API Error:", errorText);
-
+      const err = await response.text();
+      console.error("AI Error:", err);
       throw new Error("AI service failed");
     }
 
@@ -261,32 +198,23 @@ Respond naturally.
     const answer =
       data?.choices?.[0]?.message?.content?.trim();
 
-    if (!answer) {
-      throw new Error("No AI response generated");
-    }
-
-    console.log(
-      `[Finance Chat] Success: ${answer.substring(0, 80)}...`
-    );
-
     return {
       success: true,
       answer,
       stats: {
-        totalTransactions: transactions.length,
-        totalSpent: totalSpent.toFixed(2),
-        totalIncome: totalIncome.toFixed(2),
-        currentBalance: currentBalance.toFixed(2),
+        transactions: transactions.length,
+        spent: totalSpent.toFixed(2),
+        income: totalIncome.toFixed(2),
+        balance: balance.toFixed(2),
       },
     };
   } catch (error) {
-    console.error("[Finance Chat] Error:", error);
+    console.error("[Finance AI Error]", error);
 
     return {
       success: false,
       message:
-        error?.message ||
-        "Failed to process finance AI request",
+        error?.message || "Something went wrong",
     };
   }
 }
