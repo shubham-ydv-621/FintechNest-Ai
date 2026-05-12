@@ -6,6 +6,7 @@ import { Inter } from "next/font/google";
 import Header from "@/components/header";
 import { ClerkProvider } from "@clerk/nextjs";
 import { Toaster } from "sonner";
+import { AIChatAssistant } from "@/components/ai-chat-assistant";
 
 
 const inter = Inter({subsets: ["latin"]});
@@ -23,6 +24,7 @@ export default function RootLayout({ children }) {
          <Header/>
           <main className="min-h-screen">{children}</main>
           <Toaster richColors/>
+          <AIChatAssistant/>
 
         <footer className="bg-blue-50 py-8">
   <div className="container mx-auto px-4 text-center text-gray-600 space-y-2">
