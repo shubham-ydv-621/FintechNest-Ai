@@ -225,15 +225,15 @@ export async function getUserTransactions(query = {}) {
 }
 
 // Scan Receipt using Gemini 2.5 Flash (Free - No Billing Required)
-export async function scanReceipt(file) {
-  async function callGeminiAPI(base64String, mimeType) {
+export async function scanReceipt(base64String, mimeType = "image/jpeg") {
+  async function callGeminiAPI(base64Data, mime) {
     try {
       console.log(`[Gemini] Calling Gemini 2.5 Flash API...`);
       
       const apiKey = process.env.GEMINI_API_KEY;
       if (!apiKey) {
-        console.error("[Gemini] API key not configured in Vercel");
-        throw new Error("API key missing - check Vercel environment variables");
+        console.error("[Gemini] API key not configured");
+        throw new Error("API key missing - check environment variables");
       }
 
       console.log(`[Gemini] Using API key: ${apiKey.substring(0, 10)}...`);
@@ -252,8 +252,8 @@ export async function scanReceipt(file) {
                   },
                   {
                     inline_data: {
-                      mime_type: mimeType,
-                      data: base64String,
+                      mime_type: mime,
+                      data: base64Data,
                     },
                   },
                 ],
@@ -279,15 +279,12 @@ export async function scanReceipt(file) {
   }
 
   try {
-    console.log(`[Scan] Starting receipt scan (${(file.size / 1024 / 1024).toFixed(2)}MB)`);
+    console.log(`[Scan] Starting receipt scan (${(base64String.length / 1024).toFixed(1)}KB base64)`);
 
-    if (!file) throw new Error("No file provided");
-    if (file.size > 10 * 1024 * 1024) throw new Error("File exceeds 10MB limit");
+    if (!base64String) throw new Error("No file data provided");
+    if (base64String.length > 20 * 1024 * 1024) throw new Error("Data exceeds 20MB limit");
 
-    const arrayBuffer = await file.arrayBuffer();
-    const base64String = Buffer.from(arrayBuffer).toString("base64");
-    const mimeType = file.type || "image/jpeg";
-    console.log(`[Scan] File converted to base64 (${(base64String.length / 1024).toFixed(1)}KB)`);
+    console.log(`[Scan] Base64 data prepared (${(base64String.length / 1024).toFixed(1)}KB)`);
 
     // REAL API CALL - NO FALLBACK
     const response = await callGeminiAPI(base64String, mimeType);

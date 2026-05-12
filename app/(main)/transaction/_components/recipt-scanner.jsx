@@ -113,8 +113,14 @@ export function ReceiptScanner({ onScanComplete }) {
       // Always compress to ensure file fits
       console.log("[Scanner] Starting image normalization");
       const processedFile = await normalizeImageFile(file);
-      console.log("[Scanner] Image normalized, calling API");
-      await scanReceiptFn(processedFile);
+      console.log("[Scanner] Image normalized, converting to base64");
+      
+      // Convert file to base64 for server action
+      const arrayBuffer = await processedFile.arrayBuffer();
+      const base64String = Buffer.from(arrayBuffer).toString("base64");
+      
+      console.log("[Scanner] Calling API with base64 data");
+      await scanReceiptFn(base64String, processedFile.type);
       console.log("[Scanner] API call completed");
     } catch (error) {
       const message = error?.message || "Failed to process image";
