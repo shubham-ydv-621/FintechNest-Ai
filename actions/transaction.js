@@ -224,56 +224,64 @@ export async function getUserTransactions(query = {}) {
   }
 }
 
-// Scan Receipt using Gemini 2.5 Flash (Free - No Billing Required)
+// Scan Receipt using Mistral pixtral-12b Vision Model
 export async function scanReceipt(base64String, mimeType = "image/jpeg") {
-  async function callGeminiAPI(base64Data, mime) {
+  async function callMistralAPI(base64Data, mime) {
     try {
-      console.log(`[Gemini] Calling Gemini 2.5 Flash API...`);
+      console.log(`[Mistral] Calling Mistral pixtral-12b API...`);
       
-      const apiKey = process.env.GEMINI_API_KEY;
+      const apiKey = process.env.MISTRAL_API_KEY;
       if (!apiKey) {
-        console.error("[Gemini] API key not configured");
+        console.error("[Mistral] API key not configured");
         throw new Error("API key missing - check environment variables");
       }
 
-      console.log(`[Gemini] Using API key: ${apiKey.substring(0, 10)}...`);
+      console.log(`[Mistral] Using API key: ${apiKey.substring(0, 10)}...`);
 
       const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+        `https://api.mistral.ai/v1/chat/completions`,
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { 
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${apiKey}`,
+          },
           body: JSON.stringify({
-            contents: [
+            model: "pixtral-12b",
+            messages: [
               {
-                parts: [
+                role: "user",
+                content: [
                   {
+                    type: "text",
                     text: `Extract transaction details from this receipt image. Return ONLY valid JSON (no markdown, no extra text, just the JSON object): { "amount": number, "date": "YYYY-MM-DD", "description": "string", "category": "shopping", "merchantName": "string" }`,
                   },
                   {
-                    inline_data: {
-                      mime_type: mime,
-                      data: base64Data,
+                    type: "image_url",
+                    image_url: {
+                      url: `data:${mime};base64,${base64Data}`,
                     },
                   },
                 ],
               },
             ],
+            temperature: 0.3,
+            max_tokens: 500,
           }),
         }
       );
 
-      console.log(`[Gemini] Response status: ${response.status}`);
+      console.log(`[Mistral] Response status: ${response.status}`);
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error(`[Gemini] API Error ${response.status}:`, errorText.substring(0, 300));
-        throw new Error(`Gemini API returned ${response.status}: ${errorText.substring(0, 100)}`);
+        console.error(`[Mistral] API Error ${response.status}:`, errorText.substring(0, 300));
+        throw new Error(`Mistral API returned ${response.status}: ${errorText.substring(0, 100)}`);
       }
 
       return response;
     } catch (error) {
-      console.error("[Gemini] Call failed:", error.message);
+      console.error("[Mistral] Call failed:", error.message);
       throw error;
     }
   }
@@ -287,12 +295,12 @@ export async function scanReceipt(base64String, mimeType = "image/jpeg") {
     console.log(`[Scan] Base64 data prepared (${(base64String.length / 1024).toFixed(1)}KB)`);
 
     // REAL API CALL - NO FALLBACK
-    const response = await callGeminiAPI(base64String, mimeType);
+    const response = await callMistralAPI(base64String, mimeType);
 
     const data = await response.json();
     console.log(`[Scan] Response received`, JSON.stringify(data).substring(0, 200));
 
-    const textContent = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    const textContent = data?.choices?.[0]?.message?.content;
 
     if (!textContent) {
       console.error("[Scan] No text in response:", JSON.stringify(data));
