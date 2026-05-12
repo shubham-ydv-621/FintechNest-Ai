@@ -10,9 +10,7 @@ export async function getFinanceInsight(question) {
     if (!clerkUserId) throw new Error("Unauthorized");
     if (!question?.trim()) throw new Error("Question is required");
 
-    console.log(
-      `[Finance Chat] Processing: ${question.slice(0, 80)}`
-    );
+    const lower = question.toLowerCase();
 
     // =========================
     // GET USER
@@ -24,12 +22,12 @@ export async function getFinanceInsight(question) {
     if (!dbUser) throw new Error("User not found");
 
     // =========================
-    // FETCH DATA (optimized)
+    // FETCH TRANSACTIONS (LIMITED FOR AI CONTEXT CONTROL)
     // =========================
     const transactions = await db.transaction.findMany({
       where: { userId: dbUser.id },
       orderBy: { date: "desc" },
-      take: 120,
+      take: 100,
       select: {
         amount: true,
         category: true,
@@ -47,11 +45,8 @@ export async function getFinanceInsight(question) {
     }
 
     // =========================
-    // BASIC NORMALIZATION
+    // BASIC ANALYSIS FLAGS
     // =========================
-    const lower = question.toLowerCase();
-
-    // smart intent detection
     const isBalanceQuery = lower.includes("balance");
     const isSpentQuery = lower.includes("spent") || lower.includes("spend");
     const isCategoryQuery = lower.includes("category");
@@ -85,17 +80,24 @@ export async function getFinanceInsight(question) {
         (categoryMap[cat] || 0) + Number(t.amount || 0);
     });
 
-    const topCategories = Object.entries(categoryMap)
-      .sort((a, b) => b[1] - a[1])
+    const sortedCategories = Object.entries(categoryMap)
+      .sort((a, b) => b[1] - a[1]);
+
+    const topCategories = sortedCategories
       .slice(0, 5)
       .map(([c, v]) => `${c}: $${v.toFixed(2)}`)
       .join(" | ");
 
+    const leastCategory =
+      sortedCategories.length > 0
+        ? sortedCategories[sortedCategories.length - 1]
+        : null;
+
     // =========================
-    // REDUCED CONTEXT (IMPORTANT OPTIMIZATION)
+    // MINIMAL TRANSACTION CONTEXT (IMPORTANT)
     // =========================
     const contextTransactions = transactions
-      .slice(0, 15)
+      .slice(0, 12)
       .map(
         t =>
           `${t.date.toISOString().split("T")[0]} | ${t.category} | $${t.amount} | ${t.type}`
@@ -103,22 +105,29 @@ export async function getFinanceInsight(question) {
       .join("\n");
 
     // =========================
-    // FINAL PROMPT (CLEAN + STRUCTURED)
+    // STRONG STRUCTURED PROMPT (KEY FIX)
     // =========================
     const prompt = `
-You are FintechNest AI — a premium financial intelligence assistant.
+You are FintechNest AI, a strict financial data analyst.
 
-Answer ONLY using provided data.
+You MUST respond ONLY in the format below.
+
+DO NOT write paragraphs.
+DO NOT use stars (**), markdown essays, or long explanations.
 
 ====================
-USER DATA
+DATA
 ====================
+
 Balance: $${balance.toFixed(2)}
 Income: $${totalIncome.toFixed(2)}
 Spent: $${totalSpent.toFixed(2)}
 
 Top Categories:
 ${topCategories}
+
+Least Category:
+${leastCategory ? `${leastCategory[0]}: $${leastCategory[1].toFixed(2)}` : "N/A"}
 
 Recent Transactions:
 ${contextTransactions}
@@ -129,32 +138,33 @@ QUESTION
 ${question}
 
 ====================
-RESPONSE FORMAT (STRICT)
+OUTPUT FORMAT (STRICT)
 ====================
 
-📊 Summary:
-- ...
-
-💰 Key Numbers:
-- Spent:
-- Income:
+📊 Summary
+- Total Spent:
+- Total Income:
 - Balance:
 
-📂 Breakdown:
-- ...
+💰 Key Insights
+- Main spending category:
+- Least spending category:
 
-💡 Insight:
-- ...
+📂 Category Table
+| Category | Amount |
 
-⚠️ Advice:
-- (only if needed)
+💡 Insight
+- One short financial insight only
+
+⚠️ Advice
+- Only if needed (1 line max)
 
 RULES:
-- Be extremely concise
-- No long paragraphs
-- No hallucination
-- Use numbers when possible
-- Keep professional fintech tone
+- NEVER use paragraphs
+- NEVER use markdown bold (**)
+- ALWAYS use table for categories
+- ALWAYS be concise
+- ALWAYS use numbers from data only
 `;
 
     // =========================
@@ -174,14 +184,14 @@ RULES:
             {
               role: "system",
               content:
-                "You are a strict financial AI that gives structured, precise answers.",
+                "You are a strict financial data engine that ONLY outputs structured tables and bullet points.",
             },
             {
               role: "user",
               content: prompt,
             },
           ],
-          temperature: 0.3,
+          temperature: 0.2,
           max_tokens: 350,
         }),
       }
@@ -213,8 +223,7 @@ RULES:
 
     return {
       success: false,
-      message:
-        error?.message || "Something went wrong",
+      message: error?.message || "Something went wrong",
     };
   }
 }
