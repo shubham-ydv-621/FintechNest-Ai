@@ -6,14 +6,64 @@ import { db } from "@/lib/prisma";
 export async function getFinanceInsight(question) {
   try {
     const { userId } = await auth();
-    if (!userId) throw new Error("Unauthorized");
 
-    console.log(`[Finance Chat] Processing question: ${question.substring(0, 50)}...`);
+    if (!userId) {
+      throw new Error("Unauthorized");
+    }
 
-    // 1. Fetch user transactions (last 100)
+    if (!question || question.trim().length === 0) {
+      throw new Error("Question is required");
+    }
+
+    console.log(
+      `[Finance Chat] Processing question: ${question.substring(0, 80)}`
+    );
+
+    // =========================
+    // SMART CONTEXT DETECTION
+    // =========================
+
+    const lowerQuestion = question.toLowerCase();
+
+    let categoryFilter = null;
+
+    const categories = [
+      "food",
+      "shopping",
+      "transport",
+      "entertainment",
+      "health",
+      "travel",
+      "education",
+      "bills",
+      "groceries",
+      "salary",
+    ];
+
+    for (const cat of categories) {
+      if (lowerQuestion.includes(cat)) {
+        categoryFilter = cat;
+        break;
+      }
+    }
+
+    // =========================
+    // FETCH TRANSACTIONS
+    // =========================
+
     const transactions = await db.transaction.findMany({
-      where: { userId },
-      orderBy: { date: "desc" },
+      where: {
+        userId,
+        ...(categoryFilter && {
+          category: {
+            contains: categoryFilter,
+            mode: "insensitive",
+          },
+        }),
+      },
+      orderBy: {
+        date: "desc",
+      },
       take: 100,
       select: {
         id: true,
@@ -22,7 +72,6 @@ export async function getFinanceInsight(question) {
         description: true,
         date: true,
         type: true,
-        merchantName: true,
       },
     });
 
@@ -30,21 +79,39 @@ export async function getFinanceInsight(question) {
       return {
         success: false,
         message:
-          "No transactions found. Start tracking expenses to use AI insights.",
+          "No matching transactions found for your query. Try adding more transactions first.",
       };
     }
 
-    // 2. Calculate spending statistics for context
-    const totalSpent = transactions
-      .filter((t) => t.type === "EXPENSE")
-      .reduce((sum, t) => sum + parseFloat(t.amount), 0);
+    // =========================
+    // CALCULATE INSIGHTS
+    // =========================
+
+    const expenseTransactions = transactions.filter(
+      (t) => t.type === "EXPENSE"
+    );
+
+    const incomeTransactions = transactions.filter(
+      (t) => t.type === "INCOME"
+    );
+
+    const totalSpent = expenseTransactions.reduce(
+      (sum, t) => sum + Number(t.amount || 0),
+      0
+    );
+
+    const totalIncome = incomeTransactions.reduce(
+      (sum, t) => sum + Number(t.amount || 0),
+      0
+    );
 
     const byCategoryMap = {};
-    transactions.forEach((t) => {
-      if (t.type === "EXPENSE") {
-        const cat = t.category || "uncategorized";
-        byCategoryMap[cat] = (byCategoryMap[cat] || 0) + parseFloat(t.amount);
-      }
+
+    expenseTransactions.forEach((t) => {
+      const cat = t.category || "Uncategorized";
+
+      byCategoryMap[cat] =
+        (byCategoryMap[cat] || 0) + Number(t.amount || 0);
     });
 
     const topCategories = Object.entries(byCategoryMap)
@@ -53,40 +120,72 @@ export async function getFinanceInsight(question) {
       .map(([cat, amount]) => `${cat}: $${amount.toFixed(2)}`)
       .join(", ");
 
-    // 3. Format transactions for context
+    // =========================
+    // FORMAT TRANSACTIONS
+    // =========================
+
     const recentTransactions = transactions
       .slice(0, 20)
-      .map(
-        (t) =>
-          `${new Date(t.date).toLocaleDateString()}: ${t.category} - $${parseFloat(t.amount).toFixed(2)} (${t.description})`
-      )
+      .map((t) => {
+        return `
+${new Date(t.date).toLocaleDateString()}
+Category: ${t.category || "Unknown"}
+Amount: $${Number(t.amount || 0).toFixed(2)}
+Type: ${t.type}
+Description: ${t.description || "No description"}
+`;
+      })
       .join("\n");
 
-    // 4. Build AI prompt with context
-    const prompt = `You are a financial AI advisor analyzing spending patterns.
+    // =========================
+    // BUILD AI PROMPT
+    // =========================
 
-USER'S RECENT TRANSACTIONS:
+    const prompt = `
+You are FintechNest AI, an advanced financial intelligence assistant.
+
+Your job is to analyze user spending behavior and answer based ONLY on the financial data provided below.
+
+=========================
+USER FINANCIAL DATA
+=========================
+
+Recent Transactions:
 ${recentTransactions}
 
-SPENDING SUMMARY:
-- Total Spent: $${totalSpent.toFixed(2)}
-- Top Categories: ${topCategories}
+Financial Summary:
+- Total Expenses: $${totalSpent.toFixed(2)}
+- Total Income: $${totalIncome.toFixed(2)}
 - Transaction Count: ${transactions.length}
+- Top Spending Categories: ${topCategories}
 
-USER QUESTION: "${question}"
+=========================
+USER QUESTION
+=========================
 
-Instructions:
-1. Answer based ONLY on their actual transaction data above
-2. Be conversational and friendly
-3. Give specific numbers and insights
-4. Suggest actionable tips if relevant
-5. Keep response concise (2-3 sentences max)
+${question}
 
-Respond directly without any preamble.`;
+=========================
+INSTRUCTIONS
+=========================
 
-    console.log(`[Finance Chat] Built context, calling Mistral API...`);
+1. Answer ONLY using the provided financial data
+2. Be conversational, intelligent, and concise
+3. Mention exact spending numbers when relevant
+4. Give financial insights or suggestions if useful
+5. Keep responses within 2-4 sentences
+6. Do not hallucinate missing financial information
+7. Sound like a premium fintech AI assistant
 
-    // 5. Call Mistral API
+Respond directly.
+`;
+
+    console.log("[Finance Chat] Context built successfully");
+
+    // =========================
+    // CALL MISTRAL API
+    // =========================
+
     const response = await fetch(
       "https://api.mistral.ai/v1/chat/completions",
       {
@@ -99,42 +198,57 @@ Respond directly without any preamble.`;
           model: "mistral-small",
           messages: [
             {
+              role: "system",
+              content:
+                "You are FintechNest AI, an intelligent financial assistant that provides analytical insights about user spending patterns.",
+            },
+            {
               role: "user",
               content: prompt,
             },
           ],
-          temperature: 0.7,
+          temperature: 0.5,
           max_tokens: 300,
         }),
       }
     );
 
     if (!response.ok) {
-      const error = await response.text();
-      console.error("[Finance Chat] API Error:", error);
-      throw new Error("Failed to get AI insight");
+      const errorText = await response.text();
+
+      console.error("[Finance Chat] API Error:", errorText);
+
+      throw new Error("AI service failed to respond");
     }
 
     const data = await response.json();
-    const answer = data?.choices?.[0]?.message?.content || "";
+
+    const answer = data?.choices?.[0]?.message?.content?.trim();
 
     if (!answer) {
-      throw new Error("No response from AI");
+      throw new Error("No AI response generated");
     }
 
-    console.log(`[Finance Chat] ✓ Success: ${answer.substring(0, 50)}...`);
+    console.log(
+      `[Finance Chat] Success: ${answer.substring(0, 80)}...`
+    );
 
     return {
       success: true,
       answer,
-      transactions: transactions.length,
-      totalSpent: totalSpent.toFixed(2),
+      stats: {
+        totalTransactions: transactions.length,
+        totalSpent: totalSpent.toFixed(2),
+        totalIncome: totalIncome.toFixed(2),
+      },
     };
   } catch (error) {
-    console.error("[Finance Chat] Error:", error.message);
+    console.error("[Finance Chat] Error:", error);
+
     return {
       success: false,
-      message: error.message || "Failed to process your question",
+      message:
+        error?.message || "Failed to process finance AI request",
     };
   }
 }
