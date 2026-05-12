@@ -5,9 +5,9 @@ import { db } from "@/lib/prisma";
 
 export async function getFinanceInsight(question) {
   try {
-    const { userId } = await auth();
+    const { userId: clerkUserId } = await auth();
 
-    if (!userId) {
+    if (!clerkUserId) {
       throw new Error("Unauthorized");
     }
 
@@ -19,15 +19,27 @@ export async function getFinanceInsight(question) {
       `[Finance Chat] Processing question: ${question.substring(0, 80)}`
     );
 
-    const lowerQuestion = question.toLowerCase();
+    // =========================
+    // GET REAL DATABASE USER
+    // =========================
+
+    const dbUser = await db.user.findUnique({
+      where: {
+        clerkUserId,
+      },
+    });
+
+    if (!dbUser) {
+      throw new Error("User not found in database");
+    }
 
     // =========================
-    // FETCH ALL TRANSACTIONS
+    // FETCH TRANSACTIONS
     // =========================
 
     const transactions = await db.transaction.findMany({
       where: {
-        userId,
+        userId: dbUser.id,
       },
       orderBy: {
         date: "desc",
@@ -52,8 +64,10 @@ export async function getFinanceInsight(question) {
     }
 
     // =========================
-    // SMART CATEGORY DETECTION
+    // FILTERS
     // =========================
+
+    const lowerQuestion = question.toLowerCase();
 
     const categories = [
       "food",
@@ -77,10 +91,6 @@ export async function getFinanceInsight(question) {
       }
     }
 
-    // =========================
-    // OPTIONAL FILTERING
-    // =========================
-
     let filteredTransactions = transactions;
 
     if (detectedCategory) {
@@ -96,7 +106,7 @@ export async function getFinanceInsight(question) {
     }
 
     // =========================
-    // CALCULATE FINANCIAL DATA
+    // CALCULATIONS
     // =========================
 
     const expenseTransactions = transactions.filter(
@@ -159,7 +169,7 @@ Description: ${t.description || "No description"}
       .join("\n");
 
     // =========================
-    // BUILD AI PROMPT
+    // BUILD PROMPT
     // =========================
 
     const prompt = `
@@ -199,18 +209,16 @@ RULES
 2. Give exact spending values when possible
 3. Keep response concise and premium
 4. Give intelligent financial insights
-5. If asked about overspending, analyze categories
-6. If asked about balance, use Current Balance
-7. Never hallucinate fake transactions
-8. Sound like a smart fintech AI assistant
+5. Never hallucinate fake transactions
+6. Sound like a smart fintech AI assistant
 
 Respond naturally.
 `;
 
-    console.log("[Finance Chat] Context built successfully");
+    console.log("[Finance Chat] Calling Mistral API");
 
     // =========================
-    // CALL MISTRAL API
+    // AI CALL
     // =========================
 
     const response = await fetch(
