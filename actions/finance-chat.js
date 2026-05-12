@@ -19,13 +19,41 @@ export async function getFinanceInsight(question) {
       `[Finance Chat] Processing question: ${question.substring(0, 80)}`
     );
 
-    // =========================
-    // SMART CONTEXT DETECTION
-    // =========================
-
     const lowerQuestion = question.toLowerCase();
 
-    let categoryFilter = null;
+    // =========================
+    // FETCH ALL TRANSACTIONS
+    // =========================
+
+    const transactions = await db.transaction.findMany({
+      where: {
+        userId,
+      },
+      orderBy: {
+        date: "desc",
+      },
+      take: 150,
+      select: {
+        id: true,
+        amount: true,
+        category: true,
+        description: true,
+        date: true,
+        type: true,
+      },
+    });
+
+    if (!transactions.length) {
+      return {
+        success: false,
+        message:
+          "No transactions found yet. Add some transactions first.",
+      };
+    }
+
+    // =========================
+    // SMART CATEGORY DETECTION
+    // =========================
 
     const categories = [
       "food",
@@ -40,51 +68,35 @@ export async function getFinanceInsight(question) {
       "salary",
     ];
 
+    let detectedCategory = null;
+
     for (const cat of categories) {
       if (lowerQuestion.includes(cat)) {
-        categoryFilter = cat;
+        detectedCategory = cat;
         break;
       }
     }
 
     // =========================
-    // FETCH TRANSACTIONS
+    // OPTIONAL FILTERING
     // =========================
 
-    const transactions = await db.transaction.findMany({
-      where: {
-        userId,
-        ...(categoryFilter && {
-          category: {
-            contains: categoryFilter,
-            mode: "insensitive",
-          },
-        }),
-      },
-      orderBy: {
-        date: "desc",
-      },
-      take: 100,
-      select: {
-        id: true,
-        amount: true,
-        category: true,
-        description: true,
-        date: true,
-        type: true,
-      },
-    });
+    let filteredTransactions = transactions;
 
-    if (transactions.length === 0) {
-      return {
-        success: false,
-        message:
-          "No matching transactions found for your query. Try adding more transactions first.",
-      };
+    if (detectedCategory) {
+      const matched = transactions.filter((t) =>
+        (t.category || "")
+          .toLowerCase()
+          .includes(detectedCategory)
+      );
+
+      if (matched.length > 0) {
+        filteredTransactions = matched;
+      }
     }
 
     // =========================
-    // CALCULATE INSIGHTS
+    // CALCULATE FINANCIAL DATA
     // =========================
 
     const expenseTransactions = transactions.filter(
@@ -105,6 +117,12 @@ export async function getFinanceInsight(question) {
       0
     );
 
+    const currentBalance = totalIncome - totalSpent;
+
+    // =========================
+    // CATEGORY ANALYTICS
+    // =========================
+
     const byCategoryMap = {};
 
     expenseTransactions.forEach((t) => {
@@ -117,18 +135,21 @@ export async function getFinanceInsight(question) {
     const topCategories = Object.entries(byCategoryMap)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 5)
-      .map(([cat, amount]) => `${cat}: $${amount.toFixed(2)}`)
+      .map(
+        ([cat, amount]) =>
+          `${cat}: $${Number(amount).toFixed(2)}`
+      )
       .join(", ");
 
     // =========================
-    // FORMAT TRANSACTIONS
+    // RECENT TRANSACTIONS
     // =========================
 
-    const recentTransactions = transactions
-      .slice(0, 20)
+    const recentTransactions = filteredTransactions
+      .slice(0, 25)
       .map((t) => {
         return `
-${new Date(t.date).toLocaleDateString()}
+Date: ${new Date(t.date).toLocaleDateString()}
 Category: ${t.category || "Unknown"}
 Amount: $${Number(t.amount || 0).toFixed(2)}
 Type: ${t.type}
@@ -142,42 +163,48 @@ Description: ${t.description || "No description"}
     // =========================
 
     const prompt = `
-You are FintechNest AI, an advanced financial intelligence assistant.
+You are FintechNest AI, an intelligent financial assistant.
 
-Your job is to analyze user spending behavior and answer based ONLY on the financial data provided below.
+Analyze ONLY the financial data below and answer the user's question accurately.
 
 =========================
 USER FINANCIAL DATA
 =========================
 
+Current Balance: $${currentBalance.toFixed(2)}
+
+Total Income: $${totalIncome.toFixed(2)}
+
+Total Expenses: $${totalSpent.toFixed(2)}
+
+Transaction Count: ${transactions.length}
+
+Top Spending Categories:
+${topCategories}
+
 Recent Transactions:
 ${recentTransactions}
-
-Financial Summary:
-- Total Expenses: $${totalSpent.toFixed(2)}
-- Total Income: $${totalIncome.toFixed(2)}
-- Transaction Count: ${transactions.length}
-- Top Spending Categories: ${topCategories}
 
 =========================
 USER QUESTION
 =========================
 
-${question}
+"${question}"
 
 =========================
-INSTRUCTIONS
+RULES
 =========================
 
-1. Answer ONLY using the provided financial data
-2. Be conversational, intelligent, and concise
-3. Mention exact spending numbers when relevant
-4. Give financial insights or suggestions if useful
-5. Keep responses within 2-4 sentences
-6. Do not hallucinate missing financial information
-7. Sound like a premium fintech AI assistant
+1. Use ONLY the provided financial data
+2. Give exact spending values when possible
+3. Keep response concise and premium
+4. Give intelligent financial insights
+5. If asked about overspending, analyze categories
+6. If asked about balance, use Current Balance
+7. Never hallucinate fake transactions
+8. Sound like a smart fintech AI assistant
 
-Respond directly.
+Respond naturally.
 `;
 
     console.log("[Finance Chat] Context built successfully");
@@ -200,14 +227,14 @@ Respond directly.
             {
               role: "system",
               content:
-                "You are FintechNest AI, an intelligent financial assistant that provides analytical insights about user spending patterns.",
+                "You are an advanced AI financial assistant.",
             },
             {
               role: "user",
               content: prompt,
             },
           ],
-          temperature: 0.5,
+          temperature: 0.4,
           max_tokens: 300,
         }),
       }
@@ -218,12 +245,13 @@ Respond directly.
 
       console.error("[Finance Chat] API Error:", errorText);
 
-      throw new Error("AI service failed to respond");
+      throw new Error("AI service failed");
     }
 
     const data = await response.json();
 
-    const answer = data?.choices?.[0]?.message?.content?.trim();
+    const answer =
+      data?.choices?.[0]?.message?.content?.trim();
 
     if (!answer) {
       throw new Error("No AI response generated");
@@ -240,6 +268,7 @@ Respond directly.
         totalTransactions: transactions.length,
         totalSpent: totalSpent.toFixed(2),
         totalIncome: totalIncome.toFixed(2),
+        currentBalance: currentBalance.toFixed(2),
       },
     };
   } catch (error) {
@@ -248,7 +277,8 @@ Respond directly.
     return {
       success: false,
       message:
-        error?.message || "Failed to process finance AI request",
+        error?.message ||
+        "Failed to process finance AI request",
     };
   }
 }
