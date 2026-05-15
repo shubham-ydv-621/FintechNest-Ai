@@ -123,7 +123,6 @@ export function FloatingActionButtons() {
               }}
             >
               {action.onClick ? (
-              {isVisible ? (
                 <button
                   onClick={() => {
                     action.onClick();
@@ -136,20 +135,6 @@ export function FloatingActionButtons() {
                   <div className="absolute inset-0 bg-white/20 scale-0 group-hover:scale-100 transition-transform duration-300 rounded-full" />
                   {ButtonContent}
                 </button>
-              ) : (
-                <button
-                  onClick={() => {
-                    action.onClick();
-                    setIsOpen(false);
-                  }}
-                  className={`flex items-center justify-center w-14 h-14 text-white rounded-full shadow-lg hover:shadow-xl ${action.bgColor} transition-all duration-300 transform hover:scale-110 active:scale-95 relative overflow-hidden group`}
-                  title={action.label}
-                  aria-label={action.label}
-                >
-                  <div className="absolute inset-0 bg-white/20 scale-0 group-hover:scale-100 transition-transform duration-300 rounded-full" />
-                  {ButtonContent}
-                </button>
-              )}
               ) : (
                 <Link
                   href={action.href}
