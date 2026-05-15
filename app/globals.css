@@ -97,6 +97,86 @@ body {
   transform: rotateX(0deg) scale(1) translateY(40px);
 }
 
+/* Floating Action Buttons Animations */
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-12px);
+  }
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 40px rgba(59, 130, 246, 0.8);
+  }
+}
+
+@keyframes rotate-gradient {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@keyframes bounce-scale {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+}
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.float {
+  animation: float 3s ease-in-out infinite;
+}
+
+.pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+.bounce-scale {
+  animation: bounce-scale 2s ease-in-out infinite;
+}
+
+.slide-up {
+  animation: slide-up 0.3s ease-out;
+}
+
+/* Chat bubble animations */
+.message-enter {
+  animation: slide-up 0.3s ease-out;
+}
+
+/* Responsive animations for mobile */
+@media (max-width: 768px) {
+  .float {
+    animation: float 2.5s ease-in-out infinite;
+  }
+}
+
+
 
 
 @keyframes gradientMove {
