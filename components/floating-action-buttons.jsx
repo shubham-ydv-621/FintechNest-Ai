@@ -3,10 +3,13 @@
 import { useState, useEffect } from "react";
 import { MessageCircle, Mail, MessageCircle as WhatsApp } from "lucide-react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 export function FloatingActionButtons() {
   const [isOpen, setIsOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const pathname = usePathname();
+  const isHomePage = pathname === "/";
 
   useEffect(() => {
     setMounted(true);
@@ -45,6 +48,61 @@ export function FloatingActionButtons() {
       delay: "transition-all duration-300 ease-out",
     },
   ];
+
+  // On home page, show just email and whatsapp as direct buttons
+  if (isHomePage) {
+    return (
+      <>
+        {/* Home Page: AI Chat on LEFT, Email & WhatsApp on RIGHT */}
+        
+        {/* AI Chat Button on LEFT */}
+        <button
+          onClick={() => window.dispatchEvent(new CustomEvent("openAIChat"))}
+          className="fixed bottom-6 left-6 z-40 p-4 text-white rounded-full shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:scale-110 bg-gradient-to-br from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 float"
+          title="Open AI Chat"
+          aria-label="Open AI Chat"
+        >
+          <div className="absolute inset-0 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full scale-100 transition-transform duration-300 opacity-20"
+            style={{
+              animation: "pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite",
+            }}
+          />
+          <MessageCircle className="w-6 h-6 relative z-10" />
+        </button>
+
+        {/* Email & WhatsApp Buttons on RIGHT */}
+        <div className="fixed bottom-6 right-6 z-40 flex flex-col gap-4">
+          {/* Email Button */}
+          <Link
+            href="mailto:Shubham2006621@gmail.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-center w-14 h-14 text-white rounded-full shadow-lg hover:shadow-xl bg-red-500 hover:bg-red-600 transition-all duration-300 transform hover:scale-110 active:scale-95 relative overflow-hidden group"
+            title="Email Us"
+            aria-label="Email Us"
+          >
+            <div className="absolute inset-0 bg-white/20 scale-0 group-hover:scale-100 transition-transform duration-300 rounded-full" />
+            <Mail className="w-5 h-5 relative z-10" />
+          </Link>
+
+          {/* WhatsApp Button */}
+          <Link
+            href="https://wa.me/919876543210"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-center w-14 h-14 text-white rounded-full shadow-lg hover:shadow-xl bg-green-500 hover:bg-green-600 transition-all duration-300 transform hover:scale-110 active:scale-95 relative overflow-hidden group"
+            title="Chat on WhatsApp"
+            aria-label="Chat on WhatsApp"
+          >
+            <div className="absolute inset-0 bg-white/20 scale-0 group-hover:scale-100 transition-transform duration-300 rounded-full" />
+            <WhatsApp className="w-5 h-5 relative z-10" />
+          </Link>
+        </div>
+      </>
+    );
+  }
+
+  // On other pages, show the full interactive menu with toggle
 
   return (
     <>
