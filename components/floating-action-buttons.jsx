@@ -81,12 +81,14 @@ export function FloatingActionButtons() {
         />
       )}
 
-      {/* Floating Action Buttons */}
+      {/* Floating Action Buttons Container - with proper z-stacking */}
       <div className="fixed bottom-6 right-6 z-40 pointer-events-none">
         {actions.map((action, index) => {
           const isVisible = isOpen;
-          const angle = (360 / actions.length) * index;
-          const radius = 90;
+          // Adjusted angles for better spacing - top, upper-left, lower-left
+          const angles = [-90, 150, -150]; // Pointing up first, then spreading
+          const angle = angles[index];
+          const radius = 120; // Increased radius for better spacing
           const x = radius * Math.cos((angle * Math.PI) / 180);
           const y = radius * Math.sin((angle * Math.PI) / 180);
 
