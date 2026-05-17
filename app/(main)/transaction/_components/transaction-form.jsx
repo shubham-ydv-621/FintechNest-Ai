@@ -115,6 +115,14 @@ export function AddTransactionForm({
           ? "Transaction updated successfully"
           : "Transaction created successfully"
       );
+      
+      // Notify chat that new transaction was created
+      if (!editMode) {
+        window.dispatchEvent(new CustomEvent("transactionCreated", {
+          detail: { accountId: transactionResult.data.accountId }
+        }));
+      }
+      
       reset();
       router.push(`/account/${transactionResult.data.accountId}`);
     }

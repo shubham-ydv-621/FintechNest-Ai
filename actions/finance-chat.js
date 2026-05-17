@@ -2,6 +2,7 @@
 
 import { auth } from "@clerk/nextjs/server";
 import { db } from "@/lib/prisma";
+import { revalidatePath } from "next/cache";
 
 // =====================================================
 // HELPER: Analyze question relevance
@@ -138,6 +139,7 @@ export async function getFinanceInsight(question, accountId) {
       txFilter.accountId = filterAccountId;
     }
 
+    // Always fetch fresh data - no caching
     const transactions = await db.transaction.findMany({
       where: txFilter,
       orderBy: { date: "desc" },
@@ -249,6 +251,9 @@ Answer the question directly. Be professional and concise.`;
         allExpenses: expenses,
       });
     }
+
+    // Revalidate chat data path to ensure fresh data on next fetch
+    revalidatePath("/");
 
     return {
       success: true,

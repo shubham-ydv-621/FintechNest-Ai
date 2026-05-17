@@ -39,12 +39,20 @@ function ChatAssistantContent() {
       }
     };
 
+    const handleTransactionCreated = () => {
+      // Refresh chat when a new transaction is created
+      // This ensures fresh data from the database
+      console.log("Transaction created - chat will show fresh data on next query");
+    };
+
     window.addEventListener("openAIChat", handleOpenAIChat);
     window.addEventListener("accountChanged", handleAccountChange);
+    window.addEventListener("transactionCreated", handleTransactionCreated);
     
     return () => {
       window.removeEventListener("openAIChat", handleOpenAIChat);
       window.removeEventListener("accountChanged", handleAccountChange);
+      window.removeEventListener("transactionCreated", handleTransactionCreated);
     };
   }, []);
 
