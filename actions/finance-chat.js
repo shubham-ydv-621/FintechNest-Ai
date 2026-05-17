@@ -16,7 +16,8 @@ function analyzeQuestion(question) {
     isCategory: /category|where|spent on|spending on|on what/.test(q),
     isRecommendation: /advice|should|recommend|help|improve|cut down/.test(q),
     isComparison: /compare|vs|versus|more|less|highest/.test(q),
-    isTrend: /trend|pattern|recent|history|over time/.test(q),
+    isTrend: /trend|pattern|history|over time/.test(q),
+    isRecentTransaction: /most recent|recent transaction|latest/.test(q),
   };
 }
 
@@ -75,6 +76,20 @@ function generateSmartAnswer(question, data) {
   if (analysis.isComparison || analysis.isSpending && analysis.isCategory) {
     if (!topExpenses.length) return "No expense data to compare.";
     return `Your spending breakdown:\n\n${buildCategoryTable(topExpenses)}\n\nHighest: ${topExpenses[0][0]} (${formatCurrency(topExpenses[0][1])})`;
+  }
+
+  // Most recent transaction
+  if (analysis.isRecentTransaction) {
+    if (!recentTransactions || recentTransactions.length === 0) {
+      return "No recent transactions found.";
+    }
+    const recent = recentTransactions[0];
+    const dateStr = new Date(recent.date).toLocaleDateString('en-US', { 
+      year: 'numeric', 
+      month: 'short', 
+      day: 'numeric' 
+    });
+    return `Your most recent transaction:\n\nDate: ${dateStr}\nCategory: ${recent.category}\nAmount: ${formatCurrency(recent.amount)}\nType: ${recent.type}`;
   }
 
   // Recommendations
@@ -230,7 +245,7 @@ Answer the question directly. Be professional and concise.`;
         totalIncome,
         balance,
         topExpenses,
-        recentTransactions: transactions.slice(0, 10),
+        recentTransactions: transactions,
         allExpenses: expenses,
       });
     }
