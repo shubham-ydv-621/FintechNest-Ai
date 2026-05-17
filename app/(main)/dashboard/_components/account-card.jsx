@@ -14,7 +14,15 @@ import { useEffect } from 'react'
 
 const AccountCard=({ account })=>{
   const { name, type, balance, id, isDefault } = account;
- 
+  
+  // Set initial account in chat on mount
+  useEffect(() => {
+    if (isDefault) {
+      window.dispatchEvent(new CustomEvent("accountChanged", {
+        detail: { accountId: id }
+      }));
+    }
+  }, []);
   
   const { 
     loading: updateDefaultLoading,
@@ -37,8 +45,12 @@ const AccountCard=({ account })=>{
     useEffect(() => {
     if (updatedAccount?.success) {
       toast.success("Default account updated successfully");
+      // Dispatch event to update chat with new account
+      window.dispatchEvent(new CustomEvent("accountChanged", {
+        detail: { accountId: id }
+      }));
     }
-  }, [updatedAccount,updateDefaultLoading]);
+  }, [updatedAccount, updateDefaultLoading, id]);
 
   useEffect(() => {
     if (error) {

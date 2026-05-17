@@ -9,6 +9,7 @@ import { getFinanceInsight } from "@/actions/finance-chat";
 function ChatAssistantContent() {
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
+  const [accountId, setAccountId] = useState(null);
   const [messages, setMessages] = useState([
     {
       id: 1,
@@ -22,12 +23,29 @@ function ChatAssistantContent() {
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
-    const handleOpenAIChat = () => {
+    const handleOpenAIChat = (e) => {
       setIsOpen(true);
       setIsMinimized(false);
+      // Get accountId from event detail if provided
+      if (e.detail?.accountId) {
+        setAccountId(e.detail.accountId);
+      }
     };
+
+    const handleAccountChange = (e) => {
+      // Update accountId when account changes
+      if (e.detail?.accountId) {
+        setAccountId(e.detail.accountId);
+      }
+    };
+
     window.addEventListener("openAIChat", handleOpenAIChat);
-    return () => window.removeEventListener("openAIChat", handleOpenAIChat);
+    window.addEventListener("accountChanged", handleAccountChange);
+    
+    return () => {
+      window.removeEventListener("openAIChat", handleOpenAIChat);
+      window.removeEventListener("accountChanged", handleAccountChange);
+    };
   }, []);
 
   const scrollToBottom = () => {
@@ -53,7 +71,8 @@ function ChatAssistantContent() {
     setLoading(true);
 
     try {
-      const result = await getFinanceInsight(input);
+      // Pass accountId to the finance insight function
+      const result = await getFinanceInsight(input, accountId);
 
       if (result.success) {
         const botMessage = {

@@ -92,7 +92,7 @@ function generateSmartAnswer(question, data) {
 // =====================================================
 // MAIN FUNCTION
 // =====================================================
-export async function getFinanceInsight(question) {
+export async function getFinanceInsight(question, accountId) {
   try {
     const { userId: clerkUserId } = await auth();
 
@@ -108,8 +108,23 @@ export async function getFinanceInsight(question) {
 
     if (!dbUser) throw new Error("User not found");
 
+    // If no accountId provided, get the default account
+    let filterAccountId = accountId;
+    if (!filterAccountId) {
+      const defaultAccount = await db.account.findFirst({
+        where: { userId: dbUser.id, isDefault: true },
+      });
+      filterAccountId = defaultAccount?.id;
+    }
+
+    // Build transaction filter with accountId
+    const txFilter = { userId: dbUser.id };
+    if (filterAccountId) {
+      txFilter.accountId = filterAccountId;
+    }
+
     const transactions = await db.transaction.findMany({
-      where: { userId: dbUser.id },
+      where: txFilter,
       orderBy: { date: "desc" },
       take: 100,
       select: {
