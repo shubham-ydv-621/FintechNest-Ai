@@ -151,7 +151,7 @@ export function DashboardOverview({ accounts, transactions }) {
             Monthly Expense Breakdown
           </CardTitle>
         </CardHeader>
-        <CardContent className="p-0 pb-5">
+        <CardContent className="p-0 pb-5" data-chart-type="pie">
           {pieChartData.length === 0 ? (
             <p className="text-center text-muted-foreground py-4">
               No expenses this month

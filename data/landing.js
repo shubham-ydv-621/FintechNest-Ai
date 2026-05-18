@@ -88,7 +88,7 @@ export const howItWorksData = [
 // Testimonials Data
 export const testimonialsData = [
   {
-    name: "Ayush Yadav",
+    name: "Deepanshu Yadav",
     role: "Small Business Owner",
     image: "/ayusht.jpg", // replace with your actual image path or URL
     quote:
@@ -101,7 +101,7 @@ quote: "Building FintechNest-AI challenged me to design scalable, user-centric f
 
   },
   {
-    name: "Harsh Yadav",
+    name: "Tanishq",
     role: "Freelancer",
     image: "/harshut.png", // replace with your actual image path or URL
     quote:

@@ -1,5 +1,6 @@
 import React, { Suspense } from 'react'
 import CreateAccountDrawer from '@/components/create-account-drawer';
+import { ReportDownloadButton } from '@/components/report-download-button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Plus } from 'lucide-react';  
 import { getDashboardData, getUserAccounts } from '@/actions/dashboard';
@@ -48,6 +49,9 @@ const accounts=await getUserAccounts();
             </CardContent>
           </Card>
         </CreateAccountDrawer>
+
+        <ReportDownloadButton accounts={accounts} />
+
        {accounts.length > 0 &&
           accounts?.map((account) => {
           return  <AccountCard key={account.id} account={account} />
