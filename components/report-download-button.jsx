@@ -28,10 +28,10 @@ export function ReportDownloadButton({ accounts }) {
     setIsLoading(true);
     setError(null);
 
+    const toastId = toast.loading("Generating your financial report...");
+
     try {
       // Generate report data
-      toast.loading("Generating your financial report...");
-
       const response = await generateMonthlyReport(year, month, accountId);
 
       if (!response.success) {
@@ -52,12 +52,14 @@ export function ReportDownloadButton({ accounts }) {
       // Download PDF
       pdf.save(fileName);
 
+      toast.dismiss(toastId);
       toast.success("Report downloaded successfully!");
       setIsOpen(false);
     } catch (error) {
       console.error("Error generating report:", error);
       const errorMessage = error.message || "Failed to generate report. Please try again.";
       setError(errorMessage);
+      toast.dismiss(toastId);
       toast.error(errorMessage);
     } finally {
       setIsLoading(false);
