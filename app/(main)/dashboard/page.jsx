@@ -1,6 +1,7 @@
 import React, { Suspense } from 'react'
 import CreateAccountDrawer from '@/components/create-account-drawer';
 import { ReportDownloadButton } from '@/components/report-download-button';
+import { FinancialHealthScore } from '@/components/financial-health-score';
 import { Card, CardContent } from '@/components/ui/card';
 import { Plus } from 'lucide-react';  
 import { getDashboardData, getUserAccounts } from '@/actions/dashboard';
@@ -38,6 +39,13 @@ const accounts=await getUserAccounts();
         transactions={transactions || []}
       />
     </Suspense>
+
+    {/*financial health score*/}
+    {defaultAccount && (
+      <Suspense fallback={null}>
+        <FinancialHealthScore accountId={defaultAccount.id} />
+      </Suspense>
+    )}
 
       {/*accounts grid*/}
  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">

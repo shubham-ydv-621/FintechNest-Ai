@@ -4,6 +4,7 @@ import { db } from "@/lib/prisma";
 import { auth } from "@clerk/nextjs/server";
 import { Mistral } from "@mistralai/mistralai";
 import { startOfMonth, endOfMonth } from "date-fns";
+import { calculateFinancialHealth, calculateTaxDeductions } from "./financial-health";
 
 const mistral = new Mistral({
   apiKey: process.env.MISTRAL_API_KEY,
@@ -128,6 +129,15 @@ export async function generateMonthlyReport(year, month, accountId) {
       budgetAmount,
     });
 
+    // Calculate financial health score
+    const healthScoreResponse = await calculateFinancialHealth(accountId);
+    const healthScore = healthScoreResponse.success ? healthScoreResponse.healthScore : null;
+
+    // Calculate tax deductions for the year
+    const currentYear = new Date().getFullYear();
+    const taxResponse = await calculateTaxDeductions(accountId, currentYear);
+    const taxReport = taxResponse.success ? taxResponse.taxReport : null;
+
     // Serialize transactions
     const serializedTransactions = transactions.map(serializeData);
 
@@ -153,6 +163,8 @@ export async function generateMonthlyReport(year, month, accountId) {
         categoryBreakdown: sortedCategories,
         transactions: serializedTransactions,
         aiSuggestions,
+        healthScore,
+        taxReport,
         generatedAt: new Date().toISOString(),
       },
     };
