@@ -5,8 +5,6 @@ import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { Mail, MessageCircle } from "lucide-react";
-import MarqueeStatScroller from "@/components/marquee-stat-scroller";
-import StatusPulseBadge from "@/components/status-pulse-badge";
 
 const HeroSection = () => {
   const imageRef = useRef(null);
@@ -32,9 +30,6 @@ const HeroSection = () => {
   return (
     <section className="pt-40 pb-20 px-4">
       <div className="container mx-auto text-center">
-        {/* Status Pulse Badge */}
-        <StatusPulseBadge />
-
         <h1 className="text-5xl md:text-8xl lg:text-[105px] pb-6 gradient-title">
           Your Finance<br />Our Smart Intelligence 
         </h1>
@@ -53,11 +48,6 @@ const HeroSection = () => {
             </Button>
           </Link>
         </div>
-
-        {/* Marquee Stat Scroller */}
-        <MarqueeStatScroller />
-
-        {/* Banner Image */}
         <div className="hero-image-wrapper mt-5 md:mt-0">
           <div ref={imageRef} className="hero-image">
             <Image
