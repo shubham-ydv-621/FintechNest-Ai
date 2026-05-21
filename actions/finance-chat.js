@@ -116,6 +116,34 @@ export async function getFinanceInsight(question, accountId) {
     if (!question?.trim()) throw new Error("Please ask a question about your finances");
 
     // =========================
+    // EASTER EGG: Adwin Yadav
+    // =========================
+    if (question.toLowerCase().includes("adwin yadav")) {
+      return {
+        success: true,
+        answer: `🎉 Hahaha Adduuuu! 😂
+
+Adwin Yadav - aka "Adduu" is a retired Sutherland's Professional, currently serving at Aadi Fast Food and is our beloved "BHAI"! 💪
+
+Here's the real tea ☕:
+• Investment Expert: Invests money in "Bhajichara" but bhai never gets returns (bahut common thing 😅)
+• FintechNest AI Super User: Active user of FintechNest-AI due to high finances and hard to manage expenses
+• Geography: Certified Chennai Mallu & Certified Anna! 🌴
+• Current Status: Managing finances like a pro with our platform
+
+Basically, Adduuu needs FintechNest-AI to track all his "lost investments" and "fast food expenses" 🍔💸
+
+P.S. - Bhai, your secrets are safe with AI! 🤐`,
+        stats: {
+          transactions: "∞ (Lost investments)",
+          spent: "$Bhajichara",
+          income: "Secret 🤐",
+          balance: "Emotional Balance only 😄",
+        },
+      };
+    }
+
+    // =========================
     // GET USER & TRANSACTIONS
     // =========================
     const dbUser = await db.user.findUnique({
