@@ -5,6 +5,7 @@ import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { Mail, MessageCircle } from "lucide-react";
+import TypewriterAnimation from "@/components/typewriter-animation";
 
 const HeroSection = () => {
   const imageRef = useRef(null);
@@ -31,7 +32,7 @@ const HeroSection = () => {
     <section className="pt-40 pb-20 px-4">
       <div className="container mx-auto text-center">
         <h1 className="text-5xl md:text-8xl lg:text-[105px] pb-6 gradient-title">
-          Your Finance<br />Our Smart Intelligence 
+          Your <TypewriterAnimation /><br />Our Smart Intelligence 
         </h1>
         <p className="text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
           Track, analyze, and improve your spending intelligently — powered by real-time AI insights.

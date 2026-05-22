@@ -17,11 +17,24 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { updateBudget } from "@/actions/budget";
 
+// Helper function to format large amounts
+const formatBudgetAmount = (amount) => {
+  if (amount >= 10000000) {
+    return `₹${(amount / 10000000).toFixed(1)}Cr`;
+  } else if (amount >= 100000) {
+    return `₹${(amount / 100000).toFixed(1)}L`;
+  } else if (amount >= 1000) {
+    return `₹${(amount / 1000).toFixed(1)}K`;
+  }
+  return `₹${amount.toFixed(2)}`;
+};
+
 export function BudgetProgress({ initialBudget, currentExpenses }) {
   const [isEditing, setIsEditing] = useState(false);
   const [newBudget, setNewBudget] = useState(
     initialBudget?.amount?.toString() || ""
   );
+  const [inputError, setInputError] = useState("");
 
   const {
     loading: isLoading,
@@ -34,31 +47,44 @@ export function BudgetProgress({ initialBudget, currentExpenses }) {
     ? (currentExpenses / initialBudget.amount) * 100
     : 0;
 
+  const MAX_BUDGET = 10000000; // ₹1 Crore max
+
   const handleUpdateBudget = async () => {
     const amount = parseFloat(newBudget);
 
     if (isNaN(amount) || amount <= 0) {
+      setInputError("Please enter a valid amount");
       toast.error("Please enter a valid amount");
       return;
     }
 
+    if (amount > MAX_BUDGET) {
+      setInputError(`Maximum budget limit is ₹${MAX_BUDGET.toLocaleString("en-IN")}`);
+      toast.error(`Maximum budget limit is ₹${MAX_BUDGET.toLocaleString("en-IN")}`);
+      return;
+    }
+
+    setInputError("");
     await updateBudgetFn(amount);
   };
 
   const handleCancel = () => {
     setNewBudget(initialBudget?.amount?.toString() || "");
+    setInputError("");
     setIsEditing(false);
   };
 
   useEffect(() => {
     if (updatedBudget?.success) {
       setIsEditing(false);
+      setInputError("");
       toast.success("Budget updated successfully");
     }
   }, [updatedBudget]);
 
   useEffect(() => {
     if (error) {
+      setInputError(error.message || "Failed to update budget");
       toast.error(error.message || "Failed to update budget");
     }
   }, [error]);
@@ -72,40 +98,48 @@ export function BudgetProgress({ initialBudget, currentExpenses }) {
           </CardTitle>
           <div className="flex items-center gap-2 mt-1">
             {isEditing ? (
-              <div className="flex items-center gap-2">
-                <Input
-                  type="number"
-                  value={newBudget}
-                  onChange={(e) => setNewBudget(e.target.value)}
-                  className="w-32"
-                  placeholder="Enter amount"
-                  autoFocus
-                  disabled={isLoading}
-                />
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={handleUpdateBudget}
-                  disabled={isLoading}
-                >
-                  <Check className="h-4 w-4 text-green-500" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={handleCancel}
-                  disabled={isLoading}
-                >
-                  <X className="h-4 w-4 text-red-500" />
-                </Button>
+              <div className="flex flex-col gap-2 w-full">
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    value={newBudget}
+                    onChange={(e) => {
+                      setNewBudget(e.target.value);
+                      setInputError("");
+                    }}
+                    className="w-32"
+                    placeholder="Enter amount"
+                    autoFocus
+                    disabled={isLoading}
+                    min="1"
+                    max={MAX_BUDGET}
+                  />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={handleUpdateBudget}
+                    disabled={isLoading}
+                  >
+                    <Check className="h-4 w-4 text-green-500" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={handleCancel}
+                    disabled={isLoading}
+                  >
+                    <X className="h-4 w-4 text-red-500" />
+                  </Button>
+                </div>
+                {inputError && (
+                  <p className="text-xs text-red-500">{inputError}</p>
+                )}
               </div>
             ) : (
               <>
-                <CardDescription>
+                <CardDescription className="truncate max-w-xs">
                   {initialBudget
-                    ? `$${currentExpenses.toFixed(
-                        2
-                      )} of $${initialBudget.amount.toFixed(2)} spent`
+                    ? `${formatBudgetAmount(currentExpenses)} of ${formatBudgetAmount(initialBudget.amount)} spent`
                     : "No budget set"}
                 </CardDescription>
                 <Button
@@ -142,5 +176,5 @@ export function BudgetProgress({ initialBudget, currentExpenses }) {
         )}
       </CardContent>
     </Card>
-  ); 
+  );
 }

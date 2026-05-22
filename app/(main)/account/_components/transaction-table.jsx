@@ -285,7 +285,7 @@ export function TransactionTable({ transactions }) {
     transaction.type === "EXPENSE" ? "text-red-500" : "text-green-500"
   )}
 >
-  {transaction.type === "EXPENSE" ? "-" : "+"}${Number(transaction.amount || 0).toFixed(2)}
+  {transaction.type === "EXPENSE" ? "-" : "+"}₹{Number(transaction.amount || 0).toFixed(2)}
 </TableCell>
 
                   <TableCell>

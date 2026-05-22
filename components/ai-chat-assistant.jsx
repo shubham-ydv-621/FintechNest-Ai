@@ -195,7 +195,7 @@ function ChatAssistantContent() {
               <p className="leading-relaxed text-xs md:text-sm">{msg.text}</p>
               {msg.stats && (
                 <div className="text-xs md:text-xs mt-2 opacity-80 bg-white/10 rounded px-2 py-1">
-                  📊 Based on {msg.stats.transactions} transactions (${msg.stats.spent} analyzed)
+                  📊 Based on {msg.stats.transactions} transactions ({msg.stats.spent} analyzed)
                 </div>
               )}
               <span className="text-xs opacity-70 mt-1 block">
